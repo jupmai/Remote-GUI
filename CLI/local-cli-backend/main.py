@@ -8,10 +8,10 @@ sys.path.append(BASE_DIR)
 
 from security.security_router import security_router
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, json
 from typing import Dict
 
 from parsers import parse_response
@@ -277,6 +277,13 @@ def monitor(conn: Connection):
     if not is_feature_enabled("monitor"):
         raise HTTPException(status_code=403, detail="Feature 'monitor' is disabled")
     monitored_nodes = monitor_network(conn.conn)
+    return {"data": monitored_nodes}
+
+@app.get("/monitor_grafana/")
+def monitor_grafana(conn: str = Query(...)):
+    monitored_nodes = monitor_network(conn)
+    if isinstance(monitored_nodes, str):
+        monitored_nodes = json.loads(monitored_nodes)
     return {"data": monitored_nodes}
 
 @app.post("/submit-policy/")

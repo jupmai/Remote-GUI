@@ -2,17 +2,21 @@
 Feature Configuration Loader
 Loads and validates feature configuration from feature_config.json
 """
-import os
+
 import json
-from typing import Dict, Set, Optional
+import os
+from pathlib import Path
+from typing import Dict, Optional, Set
 
 # Cache for feature config
 _feature_config_cache: Optional[Dict] = None
 
+
 def get_feature_config_path() -> str:
     """Get the path to feature_config.json"""
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(BASE_DIR, 'feature_config.json')
+    return os.path.join(BASE_DIR, "feature_config.json")
+
 
 def load_feature_config() -> Dict:
     """
@@ -20,37 +24,30 @@ def load_feature_config() -> Dict:
     Returns cached config if already loaded, otherwise loads from file
     """
     global _feature_config_cache
-    
+
     if _feature_config_cache is not None:
         return _feature_config_cache
-    
+
     config_path = get_feature_config_path()
-    
+
     if not os.path.exists(config_path):
         print(f"⚠️  Warning: feature_config.json not found at {config_path}")
         print("⚠️  Using default: all features enabled")
         # Return default config with all features enabled
-        _feature_config_cache = {
-            "features": {},
-            "plugins": {},
-            "version": "1.0.0"
-        }
+        _feature_config_cache = {"features": {}, "plugins": {}, "version": "1.0.0"}
         return _feature_config_cache
-    
+
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = json.load(f)
             _feature_config_cache = config
             return config
     except Exception as e:
         print(f"❌ Error loading feature_config.json: {e}")
         print("⚠️  Using default: all features enabled")
-        _feature_config_cache = {
-            "features": {},
-            "plugins": {},
-            "version": "1.0.0"
-        }
+        _feature_config_cache = {"features": {}, "plugins": {}, "version": "1.0.0"}
         return _feature_config_cache
+
 
 def is_feature_enabled(feature_name: str) -> bool:
     """
@@ -60,12 +57,13 @@ def is_feature_enabled(feature_name: str) -> bool:
     """
     config = load_feature_config()
     features = config.get("features", {})
-    
+
     if feature_name not in features:
         # Feature not in config, default to enabled for backward compatibility
         return True
-    
+
     return features[feature_name].get("enabled", True)
+
 
 def is_plugin_enabled(plugin_name: str) -> bool:
     """
@@ -75,12 +73,13 @@ def is_plugin_enabled(plugin_name: str) -> bool:
     """
     config = load_feature_config()
     plugins = config.get("plugins", {})
-    
+
     if plugin_name not in plugins:
         # Plugin not in config, default to enabled for backward compatibility
         return True
-    
+
     return plugins[plugin_name].get("enabled", True)
+
 
 def get_enabled_features() -> Set[str]:
     """Get set of all enabled feature names"""
@@ -88,11 +87,13 @@ def get_enabled_features() -> Set[str]:
     features = config.get("features", {})
     return {name for name, data in features.items() if data.get("enabled", True)}
 
+
 def get_enabled_plugins() -> Set[str]:
     """Get set of all enabled plugin names"""
     config = load_feature_config()
     plugins = config.get("plugins", {})
     return {name for name, data in plugins.items() if data.get("enabled", True)}
+
 
 def get_backend_router_for_feature(feature_name: str) -> Optional[str]:
     """Get the backend router name for a feature, if specified"""
@@ -102,8 +103,51 @@ def get_backend_router_for_feature(feature_name: str) -> Optional[str]:
         return features[feature_name].get("backend_router")
     return None
 
+
 def reload_config():
     """Force reload of feature config (useful for testing or hot-reload)"""
     global _feature_config_cache
     _feature_config_cache = None
     return load_feature_config()
+
+
+def read_feature_config() -> dict:
+    path = Path(get_feature_config_path())
+    if not path.exists():
+        return {"version": "1.0.0", "features": {}, "plugins": {}}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {"version": "1.0.0", "features": {}, "plugins": {}}
+
+
+def write_feature_config(config: dict) -> None:
+    path = Path(get_feature_config_path())
+    path.write_text(json.dumps(config, indent=2))
+    reload_config()
+
+
+def enable_plugin_feature(plugin_id: str) -> None:
+    """Enables a feature in the config, errors if it doesn't exist"""
+    config = load_feature_config()
+    plugins = config.get("plugins", {})
+
+    for plugin_data in plugins.values():
+        if plugin_data.get("id") == plugin_id:
+            plugin_data["enabled"] = True
+            write_feature_config(config)
+            return
+    raise Exception(f"Feature not found: {plugin_id}")
+
+
+def disable_plugin_feature(plugin_id: str) -> None:
+    """Disable a feature in the config, errors if it doesn't exist"""
+    config = load_feature_config()
+    plugins = config.get("plugins", {})
+
+    for plugin_data in plugins.values():
+        if plugin_data.get("id") == plugin_id:
+            plugin_data["enabled"] = False
+            write_feature_config(config)
+            return
+    raise Exception("Feature not found")

@@ -1,0 +1,115 @@
+import asyncio
+import os
+import shutil
+import zipfile
+from pathlib import Path
+
+import httpx
+
+from plugins.base import InstalledPlugin, MarketplacePlugin
+from plugins.exceptions import InstallError, InvalidPluginStructureError
+from plugins.template import CRACO_CONFIG
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def write_plugin_craco(plugin_id: str, entryFileName: str, filepath: Path):
+    plugin_dev, plugin_name = plugin_id.split("/")
+    with open(filepath / "craco.config.js", "w") as f:
+        formatted = CRACO_CONFIG.substitute(
+            plugin_name=plugin_name.replace("-", "_"),
+            entryFile=entryFileName,
+            plugin_mount_fe_url=f"http://localhost:8000/official-plugins/{plugin_id}/frontend/build/",
+        )
+        f.write(formatted)
+
+
+async def install_plugin(
+    plugin: MarketplacePlugin, plugins_path: str
+) -> InstalledPlugin:
+    plugins_basepath = Path(plugins_path)
+    plugins_basepath.mkdir(parents=True, exist_ok=True)
+
+    plugin_path = plugins_basepath.joinpath(plugin.core.id)
+    plugin_path.mkdir(parents=True, exist_ok=True)
+
+    async with httpx.AsyncClient() as client:
+        async with client.stream("GET", str(plugin.download_link)) as resp:
+            resp.raise_for_status()
+            with open(plugin_path / "file.zip", "wb") as f:
+                async for chunk in resp.aiter_bytes():
+                    f.write(chunk)
+
+    with zipfile.ZipFile(plugin_path.joinpath("file.zip"), "r") as z:
+        z.extractall(plugin_path)
+
+    os.remove(plugin_path.joinpath("file.zip"))
+
+    backend_path, frontend_path = plugin_path / "backend", plugin_path / "frontend"
+    if not backend_path.exists():
+        raise InvalidPluginStructureError(plugin, plugins_basepath, missing=["backend"])
+
+    if not frontend_path.exists():
+        raise InvalidPluginStructureError(
+            plugin, plugins_basepath, missing=["frontend"]
+        )
+
+    write_plugin_craco(
+        plugin_id=plugin.core.id,
+        entryFileName=plugin.core.manifest.fe_exposed_module,
+        filepath=frontend_path,
+    )
+    install_fe_proc = await asyncio.create_subprocess_exec(
+        "npm",
+        "install",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        cwd=frontend_path,
+    )
+    install_term_code = await install_fe_proc.wait()
+
+    if install_term_code != 0:
+        raise InstallError(
+            "Failed installing plugin UI dependencies",
+            core=plugin.core,
+            install_path=plugin_path,
+        )
+
+    build_fe_proc = await asyncio.create_subprocess_exec(
+        "npm",
+        "run",
+        "build",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        cwd=frontend_path,
+    )
+    build_term_code = await build_fe_proc.wait()
+
+    if build_term_code != 0:
+        raise InstallError(
+            "Failed building plugin",
+            core=plugin.core,
+            install_path=plugin_path,
+        )
+
+    shutil.rmtree(Path(frontend_path / "node_modules"))
+
+    installed = InstalledPlugin(core=plugin.core, install_path=plugin_path)
+    installed.write(plugin_path, "plugin_installation.json")
+
+    return installed
+
+
+def uninstall_plugin(installed: InstalledPlugin):
+    # if "/" not in installed.core.id:
+    #     raise ValueError("Invalid plugin id")
+    # dev, plugin = installe.split("/")
+    # plugins_basepath = Path(BASE_DIR).joinpath("official-plugins")
+    plugin_path = installed.install_path
+    if not plugin_path.exists():
+        raise FileNotFoundError(f"Plugin '{installed.core.id}' not installed")
+    shutil.rmtree(plugin_path, ignore_errors=True)
+
+    dev_dir = installed.install_path.parent
+    if dev_dir.exists() and len(os.listdir(dev_dir)) == 0:
+        shutil.rmtree(dev_dir, ignore_errors=True)

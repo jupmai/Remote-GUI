@@ -1,0 +1,169 @@
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+
+.marketplace-wrapper {
+  padding: 32px;
+  max-width: 1100px;
+  margin: 0 auto;
+  font-family: system-ui, sans-serif;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.marketplace-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.mp-header-text h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #0f172a;
+}
+
+.mp-header-text p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+.mp-search {
+  padding: 8px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  width: 240px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.mp-search:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px #eef2ff;
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────── */
+
+.mp-section { margin-bottom: 32px; }
+
+.mp-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin: 0 0 14px;
+}
+
+/* ── Grid ────────────────────────────────────────────────────────────────── */
+
+.plugin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+
+.plugin-bubble {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.plugin-bubble:hover        { box-shadow: 0 4px 16px rgba(0,0,0,.07); }
+.plugin-bubble--active      { border-color: #a5b4fc; box-shadow: 0 0 0 3px #eef2ff; }
+
+/* ── Thumb row ───────────────────────────────────────────────────────────── */
+
+.thumb-container {
+  padding: 16px 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.plugin-thumb {
+  width: 48px; height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.plugin-thumb-placeholder {
+  width: 48px; height: 48px;
+  border-radius: 10px;
+  background: #6366f1;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 20px;
+  flex-shrink: 0;
+}
+
+.version-tag {
+  font-size: 11px; font-weight: 600;
+  color: #64748b; background: #f1f5f9;
+  padding: 2px 8px; border-radius: 99px;
+}
+
+.mp-enabled-badge {
+  margin-left: auto;
+  font-size: 11px; font-weight: 600;
+  color: #fff; background: #22c55e;
+  padding: 2px 9px; border-radius: 99px;
+}
+
+/* ── Card body ───────────────────────────────────────────────────────────── */
+
+.plugin-content {
+  padding: 12px 16px 16px;
+  flex: 1; display: flex; flex-direction: column; gap: 6px;
+}
+
+.plugin-title  { font-size: 15px; font-weight: 600; color: #0f172a; margin: 0; }
+.plugin-desc   { font-size: 13px; color: #64748b; margin: 0; line-height: 1.5; flex: 1; }
+.mp-error      { font-size: 12px; color: #ef4444; margin: 0; }
+
+/* ── Actions ─────────────────────────────────────────────────────────────── */
+
+.plugin-actions {
+  display: flex; gap: 8px;
+  margin-top: 10px; flex-wrap: wrap; align-items: center;
+}
+
+.btn-download {
+  padding: 7px 16px;
+  background: #6366f1; color: #fff;
+  border: none; border-radius: 7px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-download:hover    { background: #4f46e5; }
+
+.btn-uninstall {
+  background: transparent;
+  color: #ef4444;
+  border: 1.5px solid #ef4444;
+}
+.btn-uninstall:hover   { background: #fff0f0; }
+
+.btn-link {
+  font-size: 12px; color: #6366f1;
+  text-decoration: none; font-weight: 500;
+  margin-left: auto;
+}
+.btn-link:hover { text-decoration: underline; }
+
+/* ── Misc ────────────────────────────────────────────────────────────────── */
+
+.mp-loader, .loader { padding: 48px 32px; color: #64748b; font-size: 14px; }
+.mp-empty           { color: #94a3b8; font-size: 14px; padding: 24px 0; }

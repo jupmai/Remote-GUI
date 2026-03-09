@@ -47,24 +47,38 @@
   },
   "plugins": {
     "reportgenerator": {
+      "id": "anylog/reportgenerator",
       "enabled": true,
       "description": "Report Generator Plugin"
     },
     "nodecheck": {
+      "id": "anylog/nodecheck",
       "enabled": true,
       "description": "Node Check Plugin"
     },
     "calculator": {
-      "enabled": false,
+      "id": "anylog/calculator",
+      "enabled": true,
       "description": "Calculator Plugin"
     },
     "grafana": {
+      "id": "anylog/grafana",
       "enabled": true,
       "description": "Grafana Dashboard Plugin"
     },
     "mcpclient": {
+      "id": "anylog/mcpclient",
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
+    },
+    "marketplace": {
+      "id": "anylog/marketplace",
+      "enabled": true
+    },
+    "calc-plugin": {
+      "id": "dev/calc-plugin",
+      "enabled": true,
+      "description": "simple calculator plugin"
     }
   },
   "version": "1.0.0"

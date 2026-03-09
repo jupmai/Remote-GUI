@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
@@ -12,173 +12,166 @@ import Presets from './Presets';
 import Bookmarks from './Bookmarks';
 import SqlQueryGenerator from './SqlQueryGenerator';
 import BlockchainManager from './BlockchainManager';
+import PolicyGeneratorPage from './Security';
 
-// Import plugin loader
-import { getPluginPages } from '../plugins/loader';
-// Import feature config
-import { 
-  initializeFeatureConfig, 
-  isFeatureEnabled, 
-  isPluginEnabled 
+// Unified plugin loader (dev = require.context, prod = Module Federation)
+import { getPluginPages, refreshPluginPages, initializePluginOrder } from '../plugins/loader';
+
+import {
+  initializeFeatureConfig,
+  isFeatureEnabled,
+  isPluginEnabled,
 } from '../services/featureConfig';
 
-import PolicyGeneratorPage from './Security';
-// import Presets from './Presets';
-import '../styles/Dashboard.css'; // dashboard-specific styles
 import { getBookmarks } from '../services/file_auth';
+import '../styles/Dashboard.css';
 
+// ─── Detect federation (prod) mode ───────────────────────────────────────────
 
+const IS_FEDERATION_MODE =
+  window.__PLUGIN_MODE__ === 'federation' ||
+  window.location.port === '8000' ||
+  window.location.port === '';
 
+// ─── Feature route config ─────────────────────────────────────────────────────
+
+const FEATURE_ROUTES = [
+  { path: 'client',     component: Client,              featureKey: 'client' },
+  { path: 'monitor',    component: Monitor,             featureKey: 'monitor' },
+  { path: 'policies',   component: Policies,            featureKey: 'policies' },
+  { path: 'adddata',    component: AddData,             featureKey: 'adddata' },
+  { path: 'viewfiles',  component: ViewFiles,           featureKey: 'viewfiles' },
+  { path: 'sqlquery',   component: SqlQueryGenerator,   featureKey: 'sqlquery' },
+  { path: 'blockchain', component: BlockchainManager,   featureKey: 'blockchain' },
+  { path: 'presets',    component: Presets,             featureKey: 'presets' },
+  { path: 'bookmarks',  component: Bookmarks,           featureKey: 'bookmarks' },
+  { path: 'security',   component: PolicyGeneratorPage, featureKey: 'security' },
+];
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
-  // Load plugin pages
-  const pluginPages = getPluginPages();
-  
-  // Feature configuration state
-  const [enabledFeatures, setEnabledFeatures] = useState(new Set());
-  const [enabledPlugins, setEnabledPlugins] = useState(new Set());
-  const [configLoaded, setConfigLoaded] = useState(false);
-  
-  // Load initial state from localStorage
-  const [nodes, setNodes] = useState(() => {
-    const savedNodes = localStorage.getItem('dashboard-nodes');
-    return savedNodes ? JSON.parse(savedNodes) : [];
-  });
-  
-  const [selectedNode, setSelectedNode] = useState(() => {
-    const savedSelectedNode = localStorage.getItem('dashboard-selected-node');
-    return savedSelectedNode || null;
-  });
+  // ── Plugin pages state ──────────────────────────────────────────────────────
+  // Start with the synchronous snapshot (populated in dev, empty in prod until
+  // refreshPluginPages() resolves).
+  const [pluginPages, setPluginPages] = useState(() => getPluginPages());
 
+  // ── Feature config state ────────────────────────────────────────────────────
+  const [enabledFeatures, setEnabledFeatures] = useState(new Set());
+  const [enabledPlugins,  setEnabledPlugins]  = useState(new Set());
+  const [configLoaded,    setConfigLoaded]    = useState(false);
+
+  // ── Node / persistence state ────────────────────────────────────────────────
+  const [nodes, setNodes] = useState(() => {
+    const saved = localStorage.getItem('dashboard-nodes');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedNode, setSelectedNode] = useState(
+    () => localStorage.getItem('dashboard-selected-node') || null
+  );
   const [restoredFromStorage, setRestoredFromStorage] = useState(false);
-  
-  // Feature configuration mapping
-  const featureRoutes = [
-    { path: 'client', component: Client, featureKey: 'client' },
-    { path: 'monitor', component: Monitor, featureKey: 'monitor' },
-    { path: 'policies', component: Policies, featureKey: 'policies' },
-    { path: 'adddata', component: AddData, featureKey: 'adddata' },
-    { path: 'viewfiles', component: ViewFiles, featureKey: 'viewfiles' },
-    { path: 'sqlquery', component: SqlQueryGenerator, featureKey: 'sqlquery' },
-    { path: 'blockchain', component: BlockchainManager, featureKey: 'blockchain' },
-    { path: 'presets', component: Presets, featureKey: 'presets' },
-    { path: 'bookmarks', component: Bookmarks, featureKey: 'bookmarks' },
-    { path: 'security', component: PolicyGeneratorPage, featureKey: 'security' },
-  ];
-  
-  // Load feature configuration on mount
-  useEffect(() => {
-    const loadConfig = async () => {
-      await initializeFeatureConfig();
-      
-      // Check which features are enabled
-      const enabled = new Set();
-      for (const feature of featureRoutes) {
-        if (await isFeatureEnabled(feature.featureKey)) {
-          enabled.add(feature.featureKey);
-        }
-      }
-      setEnabledFeatures(enabled);
-      
-      // Check which plugins are enabled
-      const enabledPluginSet = new Set();
-      for (const [pluginName] of Object.entries(pluginPages)) {
-        if (await isPluginEnabled(pluginName)) {
-          enabledPluginSet.add(pluginName);
-        }
-      }
-      setEnabledPlugins(enabledPluginSet);
-      setConfigLoaded(true);
-    };
-    
-    loadConfig();
+
+  // ── Load plugins + feature config ──────────────────────────────────────────
+
+  const loadPluginsAndConfig = useCallback(async () => {
+    // 1. Pull fresh plugin pages (works in both modes)
+    const freshPages = await refreshPluginPages();
+    setPluginPages(freshPages);
+
+    // 2. Feature config
+    await initializeFeatureConfig();
+
+    const enabled = new Set();
+    for (const route of FEATURE_ROUTES) {
+      if (await isFeatureEnabled(route.featureKey)) enabled.add(route.featureKey);
+    }
+    setEnabledFeatures(enabled);
+
+    // 3. Plugin enable/disable flags
+    const enabledPluginSet = new Set();
+    for (const pluginName of Object.keys(freshPages)) {
+      if (await isPluginEnabled(pluginName)) enabledPluginSet.add(pluginName);
+    }
+    setEnabledPlugins(enabledPluginSet);
+    setConfigLoaded(true);
   }, []);
 
-  // Debug logging
-  console.log("Dashboard - selectedNode:", selectedNode);
-  console.log("Dashboard - nodes:", nodes);
-  console.log("Dashboard - localStorage nodes:", localStorage.getItem('dashboard-nodes'));
-  console.log("Dashboard - localStorage selectedNode:", localStorage.getItem('dashboard-selected-node'));
+  useEffect(() => {
+    initializePluginOrder();
+    loadPluginsAndConfig();
+  }, [loadPluginsAndConfig]);
 
-  // Save nodes to localStorage whenever they change
+  // In federation mode, poll every 5 s so the UI reflects start/stop actions
+  // triggered from the PluginDevPanel (or the backend) without a full reload.
+  useEffect(() => {
+    if (!IS_FEDERATION_MODE) return;
+    const id = setInterval(loadPluginsAndConfig, 5000);
+    return () => clearInterval(id);
+  }, [loadPluginsAndConfig]);
+
+  // ── Persistence side-effects ────────────────────────────────────────────────
+
   useEffect(() => {
     localStorage.setItem('dashboard-nodes', JSON.stringify(nodes));
   }, [nodes]);
 
-  // Save selectedNode to localStorage whenever it changes
   useEffect(() => {
-    if (selectedNode) {
-      localStorage.setItem('dashboard-selected-node', selectedNode);
-      console.log("Saved selectedNode to localStorage:", selectedNode);
-    } else {
-      localStorage.removeItem('dashboard-selected-node');
-      console.log("Removed selectedNode from localStorage");
-    }
+    if (selectedNode) localStorage.setItem('dashboard-selected-node', selectedNode);
+    else              localStorage.removeItem('dashboard-selected-node');
   }, [selectedNode]);
 
-  // Ensure selectedNode is in nodes list if it exists
   useEffect(() => {
     if (selectedNode && !nodes.includes(selectedNode)) {
-      console.log("Selected node not in nodes list, adding it:", selectedNode);
-      setNodes(prevNodes => [...prevNodes, selectedNode]);
+      setNodes((prev) => [...prev, selectedNode]);
     }
   }, [selectedNode, nodes]);
 
-  // Show restoration message if data was loaded from localStorage
   useEffect(() => {
-    const hasStoredData = localStorage.getItem('dashboard-nodes') || localStorage.getItem('dashboard-selected-node');
-    if (hasStoredData) {
-      setRestoredFromStorage(true);
-      // Auto-hide the message after 3 seconds
-      const timer = setTimeout(() => {
-        setRestoredFromStorage(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    const hasStored =
+      localStorage.getItem('dashboard-nodes') ||
+      localStorage.getItem('dashboard-selected-node');
+    if (!hasStored) return;
+    setRestoredFromStorage(true);
+    const t = setTimeout(() => setRestoredFromStorage(false), 3000);
+    return () => clearTimeout(t);
   }, []);
 
-  // On first load, if no selected node, use default bookmark if present
+  // Default bookmark on first load
   useEffect(() => {
     (async () => {
       try {
         if (!selectedNode) {
-          const res = await getBookmarks();
+          const res  = await getBookmarks();
           const list = Array.isArray(res.data) ? res.data : [];
-          const def = list.find(b => b.is_default);
-          if (def && def.node) {
+          const def  = list.find((b) => b.is_default);
+          if (def?.node) {
             setSelectedNode(def.node);
-            if (!nodes.includes(def.node)) {
-              setNodes(prev => [...prev, def.node]);
-            }
+            if (!nodes.includes(def.node)) setNodes((prev) => [...prev, def.node]);
           }
         }
-      } catch (e) {
-        // ignore failures silently
+      } catch {
+        // ignore
       }
     })();
-    // run only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Utility function to clear all stored data
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  const handleAddNode = (newNode) => {
+    if (newNode && !nodes.includes(newNode)) {
+      setNodes((prev) => [...prev, newNode]);
+    }
+  };
+
   const clearStoredData = () => {
     localStorage.removeItem('dashboard-nodes');
     localStorage.removeItem('dashboard-selected-node');
     setNodes([]);
     setSelectedNode(null);
-    console.log("Cleared all stored dashboard data");
   };
 
-  // Adds a new node (if valid and not already in the list)
-  const handleAddNode = (newNode) => {
-    if (newNode && !nodes.includes(newNode)) {
-      setNodes((nodes) => [...nodes, newNode]);
-      // Optionally set it as selected:
-      // setSelectedNode(newNode);
-    }
-  };
-
-
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="dashboard-container">
@@ -194,83 +187,85 @@ const Dashboard = () => {
         <Sidebar />
         <div className="dashboard-main">
           <Routes>
-            {/* Core Feature Routes - Filtered by feature config */}
-            {featureRoutes
-              .filter(route => enabledFeatures.has(route.featureKey))
-              .map(route => {
-                if (route.path === 'bookmarks') {
-                  return (
-                    <Route 
-                      key={route.path}
-                      path={route.path} 
-                      element={
-                        <route.component 
-                          node={selectedNode} 
-                          onSelectNode={(node) => {
-                            console.log("Selecting node from bookmarks:", node);
-                            // Add node to nodes list if not already present
-                            if (node && !nodes.includes(node)) {
-                              console.log("Adding new node to list:", node);
-                              setNodes(prevNodes => [...prevNodes, node]);
-                            }
-                            // Set as selected node
-                            setSelectedNode(node);
-                            console.log("Selected node set to:", node);
-                          }} 
-                        />
-                      } 
-                    />
-                  );
-                }
+
+            {/* ── Core feature routes ── */}
+            {FEATURE_ROUTES.filter((r) => enabledFeatures.has(r.featureKey)).map((route) => {
+              if (route.path === 'bookmarks') {
                 return (
-                  <Route 
+                  <Route
                     key={route.path}
-                    path={route.path} 
-                    element={<route.component node={selectedNode} />} 
+                    path={route.path}
+                    element={
+                      <route.component
+                        node={selectedNode}
+                        onSelectNode={(node) => {
+                          if (node && !nodes.includes(node)) {
+                            setNodes((prev) => [...prev, node]);
+                          }
+                          setSelectedNode(node);
+                        }}
+                      />
+                    }
                   />
                 );
-              })}
-            
-            {/* User Profile - Always available */}
-            <Route path="userprofile" element={<UserProfile node={selectedNode} />} />
-            
-            {/* Plugin Routes - Auto-loaded and filtered by feature config */}
-            {configLoaded && Object.entries(pluginPages)
-              .filter(([pluginName]) => enabledPlugins.has(pluginName))
-              .map(([key, plugin]) => (
-                <Route 
-                  key={key}
-                  path={plugin.path} 
-                  element={
-                    <React.Suspense fallback={<div>Loading {plugin.name}...</div>}>
-                      <plugin.component node={selectedNode} />
-                    </React.Suspense>
-                  } 
+              }
+              return (
+                <Route
+                  key={route.path}
+                  path={route.path}
+                  element={<route.component node={selectedNode} />}
                 />
-              ))}
-            
-            {/* Default view - Use first enabled feature or Client */}
-            <Route 
-              path="*" 
-              element={
-                (() => {
-                  if (enabledFeatures.has('client')) {
-                    return <Client node={selectedNode} />;
-                  }
-                  const firstEnabled = featureRoutes.find(r => enabledFeatures.has(r.featureKey));
-                  if (firstEnabled) {
-                    const Component = firstEnabled.component;
-                    return <Component node={selectedNode} />;
-                  }
-                  return <div>No features enabled. Please check feature configuration.</div>;
-                })()
-              } 
+              );
+            })}
+
+            {/* ── Always-available routes ── */}
+            <Route path="userprofile" element={<UserProfile node={selectedNode} />} />
+
+            {/* ── Plugin routes (dev = local lazy, prod = MF lazy) ── */}
+            {configLoaded &&
+              Object.entries(pluginPages)
+                .filter(([name]) => enabledPlugins.has(name))
+                .map(([key, plugin]) => (
+                  <Route
+                    key={key}
+                    path={plugin.path}
+                    element={
+                      <React.Suspense fallback={<PluginLoadingFallback name={plugin.name} />}>
+                        <plugin.component node={selectedNode} />
+                      </React.Suspense>
+                    }
+                  />
+                ))}
+
+            {/* ── Default / catch-all ── */}
+            <Route
+              path="*"
+              element={(() => {
+                if (enabledFeatures.has('client')) return <Client node={selectedNode} />;
+                const first = FEATURE_ROUTES.find((r) => enabledFeatures.has(r.featureKey));
+                if (first) {
+                  const C = first.component;
+                  return <C node={selectedNode} />;
+                }
+                return <div style={{ padding: 32 }}>No features enabled.</div>;
+              })()}
             />
+
           </Routes>
         </div>
       </div>
     </div>
   );
 };
+
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
+function PluginLoadingFallback({ name }) {
+  return (
+    <div style={{ padding: 32, color: '#64748b', fontSize: 14 }}>
+      Loading {name}…
+    </div>
+  );
+}
 
 export default Dashboard;

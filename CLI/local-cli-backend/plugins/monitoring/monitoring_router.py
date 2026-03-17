@@ -26,14 +26,24 @@ def monitor_grafana(
     monitored_nodes = monitor_network(conn)
     if isinstance(monitored_nodes, str):
         monitored_nodes = json.loads(monitored_nodes)
-
+    if node:
+        monitored_nodes = [
+            row for row in monitored_nodes
+            if row.get("node name") in node
+        ]
     return {"data": monitored_nodes}
 
-@api_router.get("/grafana")
-def monitor_grafana(conn: str = Query(...)):
+@api_router.get("/nodes")
+def get_nodes(conn: str = Query(...)):
     monitored_nodes = monitor_network(conn)
 
     if isinstance(monitored_nodes, str):
         monitored_nodes = json.loads(monitored_nodes)
 
-    return {"data": monitored_nodes}
+    return {
+        "nodes": [
+            row.get("node name")
+            for row in monitored_nodes
+            if row.get("node name")
+        ]
+    }

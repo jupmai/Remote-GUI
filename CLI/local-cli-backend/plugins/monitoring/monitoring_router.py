@@ -19,9 +19,11 @@ def run_anylog_command(cmd: str):
     return result.stdout
 
 @api_router.get("/grafana")
-def monitor_grafana(conn: str = Query(...)):
+def monitor_grafana(
+    conn: str = Query(...),
+    node: list[str] | None = Query(None)
+):
     monitored_nodes = monitor_network(conn)
-
     if isinstance(monitored_nodes, str):
         monitored_nodes = json.loads(monitored_nodes)
 

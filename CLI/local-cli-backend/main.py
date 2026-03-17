@@ -279,13 +279,6 @@ def monitor(conn: Connection):
     monitored_nodes = monitor_network(conn.conn)
     return {"data": monitored_nodes}
 
-@app.get("/monitor_grafana/")
-def monitor_grafana(conn: str = Query(...)):
-    monitored_nodes = monitor_network(conn)
-    if isinstance(monitored_nodes, str):
-        monitored_nodes = json.loads(monitored_nodes)
-    return {"data": monitored_nodes}
-
 @app.post("/submit-policy/")
 def submit_policy(conn: Connection, policy: Policy):
     # Feature check

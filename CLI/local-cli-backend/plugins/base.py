@@ -1,7 +1,15 @@
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    model_serializer,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 
@@ -9,6 +17,10 @@ class VersionInfo(BaseModel):
     major: int = Field(ge=0)
     minor: int = Field(ge=0)
     patch: int = Field(ge=0)
+
+    @model_serializer
+    def serialize_model(self) -> str:
+        return str(self)
 
     @model_validator(mode="before")
     @classmethod
@@ -54,7 +66,8 @@ class PluginManifest(BaseModel):
 
 class PluginCore(BaseModel):
     name: str
-    id: str
+    id: str = Field(default=str(uuid4()))
+    slug: str
     description: str
     version: VersionInfo
     manifest: PluginManifest
@@ -86,3 +99,10 @@ class InstalledPlugin(BaseModel):
 
         plugin_json_string = fp.read_text()
         return cls.model_validate_json(plugin_json_string)
+
+
+class LivePlugin(BaseModel):
+    installed: InstalledPlugin
+    api_prefix: str | None
+    internal_port: int | None
+    proc_id: int | None

@@ -1,109 +1,173 @@
 // src/components/Sidebar.js
-import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
-import { getPluginSidebarItems, initializePluginOrder } from '../plugins/loader';
-import { 
-  initializeFeatureConfig, 
-  isFeatureEnabled, 
-  isPluginEnabled 
-} from '../services/featureConfig';
-import '../styles/Sidebar.css';
+import React, { useState, useEffect } from "react";
+import { NavLink } from "react-router-dom";
+import {
+  getPluginSidebarItems,
+  initializePluginOrder,
+} from "../plugins/loader";
+import {
+  fetchFeatureConfig,
+  initializeFeatureConfig,
+  isFeatureEnabled,
+  isPluginEnabled,
+} from "../services/featureConfig";
+import "../styles/Sidebar.css";
 
 const Sidebar = () => {
   const [pluginItems, setPluginItems] = useState(() => getPluginSidebarItems());
   const [enabledFeatures, setEnabledFeatures] = useState(new Set());
   const [enabledPlugins, setEnabledPlugins] = useState(new Set());
+  const [installedPlugins, setInstalledPlugins] = useState([]);
   const [configLoaded, setConfigLoaded] = useState(false);
-  
-  // Feature configuration mapping
-  const featureConfig = [
-    { path: 'client', name: 'Client', featureKey: 'client' },
-    { path: 'monitor', name: 'Monitor', featureKey: 'monitor' },
-    { path: 'policies', name: 'Policies', featureKey: 'policies' },
-    { path: 'adddata', name: 'Add Data', featureKey: 'adddata' },
-    { path: 'viewfiles', name: 'View Files', featureKey: 'viewfiles' },
-    { path: 'sqlquery', name: 'SQL Query', featureKey: 'sqlquery' },
-    { path: 'blockchain', name: 'Blockchain Manager', featureKey: 'blockchain' },
-    { path: 'presets', name: 'Presets', featureKey: 'presets' },
-    { path: 'bookmarks', name: 'Bookmarks', featureKey: 'bookmarks' },
-    { path: 'security', name: 'Security (Anylog)', featureKey: 'security' },
-  ];
-  
-  // Fetch feature config and plugin order on mount
+  const [featureConfig, setFeatureConfig] = useState([]);
+
   useEffect(() => {
-    const loadConfig = async () => {
-      // Initialize both configs in parallel
-      await Promise.all([
-        initializeFeatureConfig(),
-        initializePluginOrder()
-      ]);
-      
-      // Check which features are enabled
+    const fetchConfigOnLoad = async () => {
+      const config = await fetchFeatureConfig();
+
+      console.log(`Raw config:`);
+      console.log(config);
+
+      if (config) {
+        const transformedFeatures = Object.entries(config.features || {}).map(
+          ([key, feature]) => ({
+            path: key,
+            name: key[0].toUpperCase() + key.slice(1),
+            featureKey: key,
+          }),
+        );
+
+        console.log("Feature config:");
+        console.log(transformedFeatures);
+        setFeatureConfig(transformedFeatures);
+      }
+
+      await Promise.all([initializeFeatureConfig(), initializePluginOrder()]);
+
       const enabled = new Set();
-      for (const feature of featureConfig) {
-        if (await isFeatureEnabled(feature.featureKey)) {
-          enabled.add(feature.featureKey);
+      for (const [featureKey, featureData] of Object.entries(
+        config.features || {},
+      )) {
+        if (await isFeatureEnabled(featureKey)) {
+          enabled.add(featureKey);
         }
       }
       setEnabledFeatures(enabled);
-      
-      // Check which plugins are enabled and filter plugin items
+
       const allPluginItems = getPluginSidebarItems();
       const enabledPluginItems = [];
       const enabledPluginSet = new Set();
-      
+
       for (const plugin of allPluginItems) {
         if (await isPluginEnabled(plugin.path)) {
           enabledPluginItems.push(plugin);
           enabledPluginSet.add(plugin.path);
         }
       }
-      
+
       setEnabledPlugins(enabledPluginSet);
       setPluginItems(enabledPluginItems);
       setConfigLoaded(true);
     };
-    
-    loadConfig();
+    fetchConfigOnLoad();
   }, []);
-  
-  // Filter features based on config
-  const visibleFeatures = featureConfig.filter(feature => 
-    enabledFeatures.has(feature.featureKey)
+
+  useEffect(() => {
+    const findInstalledPlugins = async () => {
+      const fetchPlugins = async () => {
+        const res = await fetch("http://localhost:8000/plugins");
+        return res.json();
+      };
+
+      const fetchConfig = async () => {
+        const res = await fetch("http://localhost:8000/feature-config");
+        return res.json();
+      };
+
+      try {
+        const [pluginsList, featureConfig] = await Promise.all([
+          fetchPlugins(),
+          fetchConfig(),
+        ]);
+
+        const enabledConfigKeys = Object.entries(featureConfig.plugins)
+          .filter(([key, value]) => key.includes("/") && value.enabled === true)
+          .map(([key]) => key);
+
+        const activePlugins = pluginsList.filter((p) => {
+          const normalizedSlug = p.slug.replace("_", "-");
+
+          return enabledConfigKeys.includes(normalizedSlug);
+        });
+
+        console.log("Enabled Plugins with '/':", activePlugins);
+
+        setInstalledPlugins(activePlugins);
+      } catch (error) {
+        console.error("Failed to load startup data:", error);
+      }
+    };
+
+    findInstalledPlugins();
+
+    const interval = setInterval(() => {
+      // return;
+      findInstalledPlugins();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const visibleFeatures = featureConfig.filter((feature) =>
+    enabledFeatures.has(feature.featureKey),
   );
-  
-  // Filter plugins based on config
-  const visiblePlugins = pluginItems.filter(plugin => 
-    enabledPlugins.has(plugin.path)
+
+  const visiblePlugins = pluginItems.filter((plugin) =>
+    enabledPlugins.has(plugin.path),
   );
-  
+
   return (
     <nav className="sidebar">
       {visibleFeatures.map((feature) => (
-        <NavLink 
+        <NavLink
           key={feature.path}
-          to={feature.path} 
-          className={({ isActive }) => isActive ? 'active' : ''}
+          to={feature.path}
+          className={({ isActive }) => (isActive ? "active" : "")}
         >
           {feature.name}
         </NavLink>
       ))}
-      
-      {/* Plugin Navigation - Auto-loaded and filtered */}
+
       {configLoaded && visiblePlugins.length > 0 && (
         <div className="plugin-section">
           {visiblePlugins.map((plugin) => (
-            <NavLink 
+            <NavLink
               key={plugin.path}
-              to={plugin.path} 
-              className={({ isActive }) => isActive ? 'active' : ''}
+              to={plugin.path}
+              className={({ isActive }) => (isActive ? "active" : "")}
             >
-              {plugin.icon && `${plugin.icon} `}{plugin.name}
+              {plugin.icon && `${plugin.icon} `}
+              {plugin.name}
             </NavLink>
           ))}
         </div>
       )}
-      
+
+      {configLoaded && installedPlugins.length > 0 && (
+        <div className="installed-plugin-section">
+          {installedPlugins.map((plugin) => (
+            <NavLink
+              key={plugin.remoteUrl}
+              // to={plugin.remoteUrl}
+              to={plugin.id}
+              className={({ isActive }) => (isActive ? "active" : "")}
+            >
+              {plugin.icon && `${plugin.icon} `}
+              {plugin.name}
+            </NavLink>
+          ))}
+        </div>
+      )}
     </nav>
   );
 };

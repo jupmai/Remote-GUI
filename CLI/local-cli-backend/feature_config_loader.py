@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, Set
 
+from plugins.base import PluginCore
+
 # Cache for feature config
 _feature_config_cache: Optional[Dict] = None
 
@@ -127,27 +129,47 @@ def write_feature_config(config: dict) -> None:
     reload_config()
 
 
-def enable_plugin_feature(plugin_id: str) -> None:
+def write_plugin_feature(plugin: PluginCore) -> None:
+    config = load_feature_config()
+
+    config["plugins"][plugin.core.slug] = {
+        "name": plugin.core.name,
+        "enabled": True,
+        "description": plugin.core.description,
+    }
+    write_feature_config(config)
+
+
+def delete_plugin_feature(plugin: PluginCore) -> None:
+    config = load_feature_config()
+
+    del config["plugins"][plugin.core.slug]
+    write_feature_config(config)
+
+
+def enable_plugin_feature(slug: str) -> None:
     """Enables a feature in the config, errors if it doesn't exist"""
     config = load_feature_config()
     plugins = config.get("plugins", {})
 
-    for plugin_data in plugins.values():
-        if plugin_data.get("id") == plugin_id:
-            plugin_data["enabled"] = True
+    for plugin_slug, data in plugins.items():
+        if plugin_slug == slug:
+            data["enabled"] = True
             write_feature_config(config)
             return
-    raise Exception(f"Feature not found: {plugin_id}")
+
+    raise Exception(f"Feature not found: {slug}")
 
 
-def disable_plugin_feature(plugin_id: str) -> None:
+def disable_plugin_feature(slug: str) -> None:
     """Disable a feature in the config, errors if it doesn't exist"""
     config = load_feature_config()
     plugins = config.get("plugins", {})
 
-    for plugin_data in plugins.values():
-        if plugin_data.get("id") == plugin_id:
-            plugin_data["enabled"] = False
+    for plugin_slug, data in plugins.items():
+        if plugin_slug == slug:
+            data["enabled"] = False
             write_feature_config(config)
             return
-    raise Exception("Feature not found")
+
+    raise Exception(f"Feature not found: {slug}")

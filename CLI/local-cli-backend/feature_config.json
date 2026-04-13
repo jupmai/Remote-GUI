@@ -47,38 +47,43 @@
   },
   "plugins": {
     "reportgenerator": {
-      "id": "anylog/reportgenerator",
+      "slug": "anylog/reportgenerator",
       "enabled": true,
       "description": "Report Generator Plugin"
     },
     "nodecheck": {
-      "id": "anylog/nodecheck",
+      "slug": "anylog/nodecheck",
       "enabled": true,
       "description": "Node Check Plugin"
     },
     "calculator": {
-      "id": "anylog/calculator",
+      "slug": "anylog/calculator",
       "enabled": true,
       "description": "Calculator Plugin"
     },
     "grafana": {
-      "id": "anylog/grafana",
+      "slug": "anylog/grafana",
       "enabled": true,
       "description": "Grafana Dashboard Plugin"
     },
     "mcpclient": {
-      "id": "anylog/mcpclient",
+      "slug": "anylog/mcpclient",
       "enabled": true,
       "description": "MCP Client Plugin - Integrates Ollama with AnyLog MCP"
     },
     "marketplace": {
-      "id": "anylog/marketplace",
+      "slug": "anylog/marketplace",
       "enabled": true
     },
-    "calc-plugin": {
-      "id": "dev/calc-plugin",
+    "dev/ssh-plugin": {
+      "name": "ssh-plugin",
       "enabled": true,
-      "description": "simple calculator plugin"
+      "description": "Remote Console"
+    },
+    "dev/chat-plugin": {
+      "name": "chat-plugin",
+      "enabled": true,
+      "description": "Chat"
     }
   },
   "version": "1.0.0"

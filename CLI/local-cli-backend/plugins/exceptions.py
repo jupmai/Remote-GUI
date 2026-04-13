@@ -32,8 +32,8 @@ class InvalidPluginStructureError(InstallError):
 
 
 class PluginNotFoundError(PluginError):
-    def __init__(self, plugin_id: str):
-        super().__init__(f"Plugin '{plugin_id}' not found")
+    def __init__(self, slug: str):
+        super().__init__(f"Plugin '{slug}' not found")
 
 
 class PluginNotRunningError(PluginError):

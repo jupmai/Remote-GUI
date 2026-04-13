@@ -1,28 +1,11 @@
-"""
-plugins/marketplace/marketplace_router.py
-
-Auto-loaded by plugins/loader.py via load_plugins(app).
-No changes to main.py needed.
-
-GET /marketplace/plugins
-
-Scans the frontend src/plugins/ directory for plugin folders and returns
-a catalogue with live enabled/disabled state from feature_config.
-
-A frontend plugin folder is identified by containing a capitalised *Page.js
-file — the same pattern as loader.js's require.context regex.
-"""
-
 import json
 import re
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter
 
-# ── Resolve backend root so we can import feature_config_loader ───────────────
-# This file lives at:  backend/plugins/marketplace/marketplace_router.py
-# Backend root is:     backend/  →  Path(__file__).parent.parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
@@ -30,17 +13,6 @@ if str(BACKEND_DIR) not in sys.path:
 from feature_config_loader import load_feature_config  # noqa: E402
 
 api_router = APIRouter(prefix="/marketplace", tags=["marketplace"])
-
-# ── Locate frontend src/plugins/ ──────────────────────────────────────────────
-# Typical layout:
-#   project-root/
-#     backend/          ← BACKEND_DIR
-#     frontend/
-#       src/
-#         plugins/      ← FRONTEND_PLUGINS_DIR
-#
-# We try common frontend folder names; set FRONTEND_PLUGINS_DIR directly if
-# your layout differs.
 
 PROJECT_ROOT = BACKEND_DIR.parent
 
@@ -56,12 +28,10 @@ def _find_frontend_plugins_dir() -> Path:
     for p in _CANDIDATES:
         if p.exists():
             return p
-    return _CANDIDATES[0]  # primary; route returns [] if it doesn't exist
+    return _CANDIDATES[0]
 
 
 FRONTEND_PLUGINS_DIR = _find_frontend_plugins_dir()
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 _PAGE_RE = re.compile(r"^[A-Z][^/]*Page\.js$")
 
@@ -71,7 +41,6 @@ def _has_page_file(plugin_dir: Path) -> bool:
 
 
 def _is_plugin_dir(path: Path) -> bool:
-    """Same exclusion rules as loader.js require.context."""
     if not path.is_dir():
         return False
     if path.name.startswith((".", "_")) or path.name == "marketplace":
@@ -139,15 +108,16 @@ def list_marketplace_plugins():
         if not _is_plugin_dir(plugin_dir):
             continue
 
-        plugin_id = plugin_dir.name
+        plugin_slug = plugin_dir.name
         meta = _read_metadata(plugin_dir)
-        fc_entry = fc_plugins.get(plugin_id)
+        fc_entry = fc_plugins.get(plugin_slug)
         enabled = fc_entry.get("enabled", True) if isinstance(fc_entry, dict) else True
 
         result.append(
             {
-                "id": plugin_id,
+                "id": str(uuid4()),
                 "name": meta["name"],
+                "slug": meta["slug"],
                 "description": meta["description"],
                 "version": meta["version"],
                 "thumbnail": meta["thumbnail"],

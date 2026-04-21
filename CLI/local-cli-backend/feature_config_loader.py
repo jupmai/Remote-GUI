@@ -129,21 +129,21 @@ def write_feature_config(config: dict) -> None:
     reload_config()
 
 
-def write_plugin_feature(plugin: PluginCore) -> None:
+def write_plugin_feature(core: PluginCore) -> None:
     config = load_feature_config()
 
-    config["plugins"][plugin.core.slug] = {
-        "name": plugin.core.name,
+    config["plugins"][core.slug] = {
+        "name": core.name,
         "enabled": True,
-        "description": plugin.core.description,
+        "description": core.description,
     }
     write_feature_config(config)
 
 
-def delete_plugin_feature(plugin: PluginCore) -> None:
+def delete_plugin_feature(slug: str) -> None:
     config = load_feature_config()
 
-    del config["plugins"][plugin.core.slug]
+    del config["plugins"][slug]
     write_feature_config(config)
 
 
@@ -158,7 +158,7 @@ def enable_plugin_feature(slug: str) -> None:
             write_feature_config(config)
             return
 
-    raise Exception(f"Feature not found: {slug}")
+    raise Exception(f"Failed enabing plugin feature: {slug} not found")
 
 
 def disable_plugin_feature(slug: str) -> None:
@@ -172,4 +172,4 @@ def disable_plugin_feature(slug: str) -> None:
             write_feature_config(config)
             return
 
-    raise Exception(f"Feature not found: {slug}")
+    raise Exception(f"Failed disabling plugin feature: {slug} not found")

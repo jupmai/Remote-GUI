@@ -1,3 +1,4 @@
+from plugins.base import build_complete_plugin
 import asyncio
 import os
 import shutil
@@ -8,7 +9,7 @@ from typing import Awaitable, Callable, Optional
 import aiofile
 import httpx
 
-from feature_config_loader import delete_plugin_feature, enable_plugin_feature
+from feature_config_loader import delete_plugin_feature, write_plugin_feature
 from plugins import manager
 from plugins.base import InstalledPlugin, MarketplacePlugin
 from plugins.exceptions import InstallError, InvalidPluginStructureError
@@ -29,8 +30,8 @@ def write_plugin_craco(slug: str, entryFileName: str, filepath: Path):
 
 
 async def install_plugin(
-    plugin: MarketplacePlugin,
-    plugins_path: str,
+    mkt_plugin: MarketplacePlugin,
+    plugins_path: Path,
     on_progress: Optional[Callable[[str], Awaitable[None]]],
 ) -> InstalledPlugin:
     loop = asyncio.get_event_loop()
@@ -38,16 +39,16 @@ async def install_plugin(
     plugins_basepath = Path(plugins_path)
     plugins_basepath.mkdir(parents=True, exist_ok=True)
 
-    plugin_path = plugins_basepath.joinpath(plugin.core.slug)
+    plugin_path = plugins_basepath.joinpath(mkt_plugin.core.slug)
     plugin_path.mkdir(parents=True, exist_ok=True)
 
     if on_progress:
         await on_progress("Downloading plugin contents")
 
-    print(f"Attempting download: {repr(str(plugin.download_link))}")
+    print(f"Attempting download: {repr(str(mkt_plugin.download_link))}")
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        async with client.stream("GET", str(plugin.download_link)) as resp:
+        async with client.stream("GET", str(mkt_plugin.download_link)) as resp:
             resp.raise_for_status()
             async with aiofile.async_open(plugin_path / "file.zip", "wb") as f:
                 async for chunk in resp.aiter_bytes():
@@ -69,16 +70,16 @@ async def install_plugin(
         await on_progress("Validating plugin structure")
     backend_path, frontend_path = plugin_path / "backend", plugin_path / "frontend"
     if not backend_path.exists():
-        raise InvalidPluginStructureError(plugin, plugins_basepath, missing=["backend"])
+        raise InvalidPluginStructureError(mkt_plugin, plugins_basepath, missing=["backend"])
 
     if not frontend_path.exists():
         raise InvalidPluginStructureError(
-            plugin, plugins_basepath, missing=["frontend"]
+            mkt_plugin, plugins_basepath, missing=["frontend"]
         )
 
     write_plugin_craco(
-        slug=plugin.core.slug,
-        entryFileName=plugin.core.manifest.fe_exposed_module,
+        slug=mkt_plugin.core.slug,
+        entryFileName=mkt_plugin.core.manifest.fe_exposed_module,
         filepath=frontend_path,
     )
 
@@ -102,7 +103,7 @@ async def install_plugin(
         if install_term_code != 0:
             raise InstallError(
                 "Failed installing plugin UI dependencies",
-                core=plugin.core,
+                core=mkt_plugin.core,
                 install_path=plugin_path,
             )
 
@@ -126,7 +127,7 @@ async def install_plugin(
         if build_term_code != 0:
             raise InstallError(
                 "Failed building plugin",
-                core=plugin.core,
+                core=mkt_plugin.core,
                 install_path=plugin_path,
             )
 
@@ -140,15 +141,19 @@ async def install_plugin(
     # shutil.rmtree(Path(frontend_path / "node_modules"))
     await loop.run_in_executor(None, shutil.rmtree, frontend_path / "node_modules")
 
-    installed = InstalledPlugin(core=plugin.core, install_path=plugin_path)
-    installed.write(plugin_path, "plugin_installation.json")
+    installed = InstalledPlugin(core=mkt_plugin.core, install_path=plugin_path)
 
-    enable_plugin_feature(plugin.core.slug)
+    complete_plugin = build_complete_plugin(installed, mkt_plugin)
+    complete_plugin.write(plugin_path, "plugin_installation.json")
+
+    # enable_plugin_feature(plugin.core.slug)
+    write_plugin_feature(mkt_plugin.core)
 
     if on_progress:
         await on_progress("Completed")
 
     return installed
+    # return installed
 
 
 async def uninstall_plugin(installed: InstalledPlugin):

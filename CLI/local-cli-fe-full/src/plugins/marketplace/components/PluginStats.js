@@ -114,6 +114,7 @@ const PluginStats = ({ sseUrl }) => {
   // const filtered =
   //   filter === "ALL" ? logs : logs.filter((l) => l.level === filter);
   const filtered = logs.filter((l) => {
+    return true
     if (filter !== "ALL" && l.level !== filter) return false;
     if (categoryFilter !== "ALL" && l.category !== categoryFilter) return false;
     return true;
@@ -310,7 +311,8 @@ const PluginStats = ({ sseUrl }) => {
                   {log.ts}
                 </span>
                 <Chip
-                  label={log.level}
+                  // label={log.level}
+                  label={"RAW"}
                   size="small"
                   color={LEVEL_COLORS[log.level]}
                   sx={{ fontSize: 9, height: 18, flexShrink: 0 }}

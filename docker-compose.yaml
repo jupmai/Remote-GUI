@@ -1,6 +1,7 @@
 services:
   remote-gui:
-    image: anylogco/remote-gui:beta
+    #image: anylogco/remote-gui:beta
+    image: anylogco/remote-gui:latest
     container_name: remote-gui
     restart: always
     stdin_open: true
@@ -12,6 +13,10 @@ services:
       - "3000:3000"
       - "3001:3001"
       - "8000:8000"
+      - "31800:31800"
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - image-vol:/app/CLI/local-cli-backend/static/
       - usr-mgm-vol:/app/CLI/local-cli/backend/usr-mgm/

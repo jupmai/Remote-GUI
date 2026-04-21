@@ -100,8 +100,6 @@ const Sidebar = () => {
           return enabledConfigKeys.includes(normalizedSlug);
         });
 
-        console.log("Enabled Plugins with '/':", activePlugins);
-
         setInstalledPlugins(activePlugins);
       } catch (error) {
         console.error("Failed to load startup data:", error);
@@ -111,7 +109,6 @@ const Sidebar = () => {
     findInstalledPlugins();
 
     const interval = setInterval(() => {
-      // return;
       findInstalledPlugins();
     }, 30000);
 

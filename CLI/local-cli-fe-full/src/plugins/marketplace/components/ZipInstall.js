@@ -1,91 +1,28 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-
-const POLL_INTERVAL_MS = 1500;
-const API_BASE = "http://localhost:8000";
+import React, { useState, useEffect } from "react";
+import usePluginInstall from "../hooks/usePluginInstall";
 
 const EMPTY_FORM = {
   name: "",
   slug: "",
+  version: "",
   description: "",
   feExposedModule: "",
   apiPrefix: "",
+  minPyVersion: "",
   downloadLink: "",
+  readme_link: "",
+  repository_link: "",
+  thumbnail: "",
+  authorThumbnail: ""
+
 };
 
 const ZipInstall = ({ onInstallComplete }) => {
   const [form, setForm] = useState(EMPTY_FORM);
-  const [installing, setInstalling] = useState(false);
-  const [progress, setProgress] = useState([]);
-  const [status, setStatus] = useState(null); // null, sntalling, enabling, complete, failed, cancelled
-  const [error, setError] = useState(null);
-  const pollRef = useRef(null);
-
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
-
-  const enablePlugin = useCallback(
-    async (slug) => {
-      setStatus("enabling");
-      setProgress((prev) => [...prev, "Enabling plugin"]);
-
-      const res = await fetch(`${API_BASE}/plugins/enable`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-
-      setStatus("complete");
-      setProgress((prev) => [...prev, "Plugin ready"]);
-      setInstalling(false);
-      if (onInstallComplete) onInstallComplete();
-    },
-    [onInstallComplete],
-  );
-
-  const pollStatus = useCallback(
-    async (slug) => {
-      try {
-        const res = await fetch(
-          `${API_BASE}/plugins/status/${encodeURIComponent(slug)}`,
-        );
-        const data = await res.json();
-
-        if (data.progress) setProgress(data.progress);
-
-        if (data.status === "complete") {
-          stopPolling();
-          try {
-            await enablePlugin(slug);
-          } catch (e) {
-            setStatus("failed");
-            setError(`Install succeeded but enable failed: ${e.message}`);
-            setInstalling(false);
-          }
-        } else if (data.status === "failed") {
-          setStatus("failed");
-          setError(data.error || "Unknown error");
-          setInstalling(false);
-          stopPolling();
-        } else if (data.status === "cancelled") {
-          setStatus("cancelled");
-          setInstalling(false);
-          stopPolling();
-        }
-      } catch (e) {
-        console.warn("Poll error:", e);
-      }
-    },
-    [enablePlugin],
-  );
+  const { install, reset, progress, status, error, installing } =
+    usePluginInstall({
+      onInstallComplete,
+    });
 
   const handleChange = (field) => (e) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -97,65 +34,32 @@ const ZipInstall = ({ onInstallComplete }) => {
     form.apiPrefix.trim() &&
     form.downloadLink.trim();
 
-  const handleInstall = async () => {
+  const handleInstall = () => {
     if (!isValid || installing) return;
-
-    setInstalling(true);
-    setProgress([]);
-    setStatus("installing");
-    setError(null);
-
-    const body = {
-      plugin: {
-        core: {
-          name: form.name.trim(),
-          slug: form.slug.trim(),
-          version: "0.0.1",
-          description: form.description.trim(),
-          manifest: {
-            minPyVersion: "0.0.1",
-            feExposedModule: form.feExposedModule.trim(),
-            api_prefix: form.apiPrefix.trim(),
-          },
+    install({
+      core: {
+        name: form.name.trim(),
+        slug: form.slug.trim(),
+        version: form.version.trim(),
+        description: form.description.trim(),
+        manifest: {
+          minPyVersion: form.minPyVersion.trim(),
+          feExposedModule: form.feExposedModule.trim(),
+          api_prefix: form.apiPrefix.trim(),
         },
-        download_link: form.downloadLink.trim(),
-        bundle_size_bytes: 0,
       },
-    };
-
-    try {
-      const installRes = await fetch(`${API_BASE}/plugins/install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!installRes.ok) {
-        const data = await installRes.json();
-        throw new Error(data.error || `HTTP ${installRes.status}`);
-      }
-
-      pollRef.current = setInterval(
-        () => pollStatus(form.slug.trim()),
-        POLL_INTERVAL_MS,
-      );
-    } catch (e) {
-      setStatus("failed");
-      setError(e.message);
-      setInstalling(false);
-    }
+      download_link: form.downloadLink.trim(),
+      readme_link: form.readme_link.trim(),
+      repository_link: form.repository_link.trim(),
+      thumbnail: form.thumbnail.trim(),
+      authorThumbnail: form.authorThumbnail.trim()
+    });
   };
 
   const handleReset = () => {
-    stopPolling();
+    reset();
     setForm(EMPTY_FORM);
-    setStatus(null);
-    setProgress([]);
-    setError(null);
-    setInstalling(false);
   };
-
-  useEffect(() => () => stopPolling(), []);
 
   const statusColor = {
     installing: "#2563eb",
@@ -229,7 +133,6 @@ const ZipInstall = ({ onInstallComplete }) => {
             disabled={installing}
           />
         </div>
-
         <div style={rowStyle}>
           <Field
             label="FE Exposed Module"
@@ -246,7 +149,6 @@ const ZipInstall = ({ onInstallComplete }) => {
             disabled={installing}
           />
         </div>
-
         <Field
           label="Description"
           placeholder="Short description of the plugin"
@@ -256,6 +158,32 @@ const ZipInstall = ({ onInstallComplete }) => {
           optional
         />
 
+        <Field
+          label="README"
+          placeholder="URL Link to PLUGIN.MD file"
+          value={form.readme_link}
+          onChange={handleChange("readme_link")}
+          disabled={installing}
+          optional
+        />
+
+        <Field
+          label="thumbnail"
+          placeholder="URL Link to plugin thumbnail"
+          value={form.thumbnail}
+          onChange={handleChange("thumbnail")}
+          disabled={installing}
+          optional
+        />
+
+        <Field
+          label="Description"
+          placeholder="Short description of the plugin"
+          value={form.description}
+          onChange={handleChange("description")}
+          disabled={installing}
+          optional
+        />
         <div style={{ ...rowStyle, alignItems: "flex-end" }}>
           <Field
             label="Download URL"
@@ -302,20 +230,15 @@ const ZipInstall = ({ onInstallComplete }) => {
               marginBottom: progress.length > 0 ? "10px" : 0,
             }}
           >
-            {(status === "installing" || status === "enabling") && (
-              <Spinner color={statusColor} />
-            )}
+            {installing && <Spinner color={statusColor} />}
             {statusLabel}
           </div>
-
           {progress.length > 0 && (
             <div
               style={{ display: "flex", flexDirection: "column", gap: "5px" }}
             >
               {progress.map((msg, i) => {
-                const isLast =
-                  i === progress.length - 1 &&
-                  (status === "installing" || status === "enabling");
+                const isLast = i === progress.length - 1 && installing;
                 const isDone = status === "complete" || i < progress.length - 1;
                 return (
                   <div
@@ -413,7 +336,6 @@ const Spinner = ({ color = "#2563eb" }) => {
       document.head.appendChild(s);
     }
   }, []);
-
   return (
     <span
       style={{
@@ -438,13 +360,7 @@ const panelStyle = {
   marginBottom: "28px",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
-
-const rowStyle = {
-  display: "flex",
-  gap: "12px",
-  flexWrap: "wrap",
-};
-
+const rowStyle = { display: "flex", gap: "12px", flexWrap: "wrap" };
 const installBtnStyle = (disabled) => ({
   padding: "9px 22px",
   borderRadius: "8px",
@@ -460,7 +376,6 @@ const installBtnStyle = (disabled) => ({
   display: "flex",
   alignItems: "center",
 });
-
 const resetBtnStyle = {
   background: "none",
   border: "none",

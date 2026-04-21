@@ -14,6 +14,20 @@ const injectingScripts = new Map();
 let cachedPluginOrder = null;
 let orderFetchPromise = null;
 
+
+const extractSlugComponents = (slugString) => {
+  const slugElements = slugString.split("/")
+  if (slugElements.length < 2) {
+    throw new Error("Invalid slug")
+  }
+
+  return {
+    reg: slugElements.length > 3 ? slugElements[slugElements.length - 3] : null,
+    org: slugElements[slugElements.length - 2],
+    pluginName: slugElements[slugElements.length - 1],
+  }
+}
+
 // Dev mode: require.context loader
 
 /**
@@ -225,7 +239,11 @@ export const discoverFederatedPlugins = async () => {
   for (const plugin of plugins) {
     const { id, name, slug, remoteUrl, exposedModule = "./PluginApp" } = plugin;
 
-    const componentName = slug.split("/")[1].replace("-", "_");
+    const slugComponents = extractSlugComponents(slug);
+    const componentName = slugComponents.pluginName.replace("-", "_");
+    // const slugElements = slug.split("/")
+    // const componentName = slugElements[slugElements.length - 2].replace("-", "_");
+    // const componentName = slug.split("/")[1].replace("-", "_");
 
     const PluginPage = React.lazy(() =>
       loadFederatedComponent({ id, componentName, remoteUrl, exposedModule })

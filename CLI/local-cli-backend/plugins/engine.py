@@ -1,3 +1,4 @@
+from plugins.base import CompletePlugin
 import asyncio
 import os
 import re
@@ -16,51 +17,50 @@ PLUGINS_PATH = (
     Path(os.path.dirname(os.path.abspath(__file__))).parent / "official-plugins"
 )
 
-
 class PluginEngine:
     def __init__(self):
         self.processes: Dict[str, asyncio.subprocess.Process] = {}
         self.plugins: Dict[str, InstalledPlugin] = {}
         self.proc_metrics: Dict[str, Dict[int, Process]] = {}
 
-    def find_installed_plugins(self, plugins_path: Path) -> List[InstalledPlugin]:
-        installed: List[InstalledPlugin] = []
+    def find_local_plugins(self, plugins_path: Path) -> List[CompletePlugin]:
+        local_plugins: List[CompletePlugin] = []
 
         # print(f"Searching {plugins_path=}")
         for root, _, files in os.walk(plugins_path):
             if "plugin_installation.json" in files:
+                file_path = Path(root) / "plugin_installation.json"
                 try:
-                    file_path = Path(root) / "plugin_installation.json"
                     # print(f"FOUND INSTALLATION: {file_path}")
-
-                    installed.append(InstalledPlugin.load(file_path))
+                    local_plugins.append(CompletePlugin.load(file_path))
                 except Exception:
                     print(f"Found corrupted plugin install: {file_path}")
                     continue
 
-        return installed
+        return local_plugins
 
-    def get_installed_plugin_by_id(
+    def get_local_plugin_by_id(
         self, plugin_id: str, plugins_path: Path
-    ) -> Optional[InstalledPlugin]:
-        installed_plugins = self.find_installed_plugins(plugins_path)
-        for plugin in installed_plugins:
+    ) -> Optional[CompletePlugin]:
+        local_plugins = self.find_local_plugins(plugins_path)
+        for plugin in local_plugins:
             if plugin.core.slug == plugin_id:
                 return plugin
         return None
 
     async def start_plugin(self, installed_plugin: InstalledPlugin, port: int):
+        backend_path = installed_plugin.install_path / "backend"
+        venv_path = backend_path / ".venv"
+
+        bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+        venv_python = venv_path / bin_dir / "python"
+        venv_uvicorn = venv_path / bin_dir / "uvicorn"
+
+        log_path = installed_plugin.install_path / "log.txt"
+        log_file = None
+
         try:
-            backend_path = installed_plugin.install_path / "backend"
-            venv_path = backend_path / ".venv"
-
-            bin_dir = "Scripts" if sys.platform == "win32" else "bin"
-            venv_python = venv_path / bin_dir / "python"
-            venv_uvicorn = venv_path / bin_dir / "uvicorn"
-
-            log_path = installed_plugin.install_path / "log.txt"
             log_file = open(log_path, "ab")
-
             if not venv_path.exists():
                 venv_proc = await asyncio.create_subprocess_exec(
                     "uv",
@@ -105,7 +105,8 @@ class PluginEngine:
             return proc
 
         except Exception as e:
-            log_file.close()
+            if log_file:
+                log_file.close()
             raise PluginError(f"Unable to start plugin: {e}")
 
     async def stop_plugin(self, slug: str, timeout: float = 5.0):
@@ -150,10 +151,10 @@ class PluginEngine:
         active_plugin = self.plugins.get(slug)
         if not active_plugin:
             print(f"PLUGINS PATH: {PLUGINS_PATH}")
-            installed = self.get_installed_plugin_by_id(slug, PLUGINS_PATH)
+            installed = self.get_local_plugin_by_id(slug, PLUGINS_PATH)
             if installed is None:
                 raise PluginNotFoundError(slug)
-            raise PluginNotRunningError(installed)
+            raise PluginNotRunningError(installed.to_installed())
         return Path(active_plugin.install_path) / "log.txt"
 
     async def stream_log(self, slug: str) -> AsyncGenerator[Dict, None]:

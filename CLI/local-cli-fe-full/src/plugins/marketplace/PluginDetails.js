@@ -6,17 +6,20 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
   const [readmeContent, setReadmeContent] = useState(null);
 
   useEffect(() => {
-    if (!selectedPlugin?.readmeLink) return;
-    
-    setReadmeContent(null); 
+    if (!selectedPlugin?.readme_link) return;
 
-    fetch(selectedPlugin.readmeLink)
+    setReadmeContent(null);
+
+    fetch(selectedPlugin.readme_link)
       .then((res) => res.text())
       .then(setReadmeContent)
       .catch((e) => {
-        console.error(`Failed fetching readme from ${selectedPlugin.readmeLink}`, e);
+        console.error(
+          `Failed fetching readme from ${selectedPlugin.readme_link}`,
+          e,
+        );
       });
-  }, [selectedPlugin.readmeLink]);
+  }, [selectedPlugin.readme_link]);
 
   return (
     <div
@@ -95,7 +98,7 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
                     color: "#111827",
                   }}
                 >
-                  {selectedPlugin.name}
+                  {selectedPlugin.core.name}
                 </h2>
                 <span
                   style={{
@@ -104,7 +107,7 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
                     fontWeight: "500",
                   }}
                 >
-                  {selectedPlugin.slug}
+                  {selectedPlugin.core.slug}
                 </span>
               </div>
             </div>
@@ -120,11 +123,23 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
                   gap: "4px",
                 }}
               >
-                <span style={{ fontSize: "12px", color: "#9ca3af", fontWeight: "500" }}>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "#9ca3af",
+                    fontWeight: "500",
+                  }}
+                >
                   VERSION
                 </span>
-                <span style={{ fontSize: "15px", fontWeight: "700", color: "#111827" }}>
-                  v{selectedPlugin.version}
+                <span
+                  style={{
+                    fontSize: "15px",
+                    fontWeight: "700",
+                    color: "#111827",
+                  }}
+                >
+                  v{selectedPlugin.core.version}
                 </span>
               </div>
               {selectedPlugin.downloadCount && (
@@ -138,18 +153,37 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
                     gap: "4px",
                   }}
                 >
-                  <span style={{ fontSize: "12px", color: "#9ca3af", fontWeight: "500" }}>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#9ca3af",
+                      fontWeight: "500",
+                    }}
+                  >
                     DOWNLOADS
                   </span>
-                  <span style={{ fontSize: "15px", fontWeight: "700", color: "#111827" }}>
+                  <span
+                    style={{
+                      fontSize: "15px",
+                      fontWeight: "700",
+                      color: "#111827",
+                    }}
+                  >
                     {selectedPlugin.downloadCount.toLocaleString()}
                   </span>
                 </div>
               )}
             </div>
 
-            <p style={{ color: "#6b7280", lineHeight: 1.7, fontSize: "15px", margin: 0 }}>
-              {selectedPlugin.description}
+            <p
+              style={{
+                color: "#6b7280",
+                lineHeight: 1.7,
+                fontSize: "15px",
+                margin: 0,
+              }}
+            >
+              {selectedPlugin.core.description}
             </p>
           </div>
 
@@ -175,7 +209,10 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
               LINKS
             </p>
             {[
-              { label: "📦 Repository", href: selectedPlugin.repoLink || "#" },
+              {
+                label: "📦 Repository",
+                href: selectedPlugin.repository_link || "#",
+              },
               { label: "🐛 Report a Bug", href: selectedPlugin.bugLink || "#" },
             ].map((link) => (
               <a
@@ -211,7 +248,9 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
                 margin: "32px 0 24px",
               }}
             >
-              <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+              <div
+                style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }}
+              />
               <span
                 style={{
                   fontSize: "11px",
@@ -223,10 +262,15 @@ const PluginDetailsView = ({ selectedPlugin, closeModalCallback }) => {
               >
                 README
               </span>
-              <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+              <div
+                style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }}
+              />
             </div>
 
-            <div className="markdown-body" style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7 }}>
+            <div
+              className="markdown-body"
+              style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7 }}
+            >
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {readmeContent}
               </ReactMarkdown>

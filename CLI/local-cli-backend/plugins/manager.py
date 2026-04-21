@@ -1,3 +1,4 @@
+from plugins.base import CompletePlugin
 import asyncio
 import os
 import socket
@@ -69,8 +70,8 @@ class PluginManager:
 
         # return LivePlugin(installed=installed, api_prefix=self._redirect_mappings.get(installed.core.slug, installed.core.slug), internal_port=port, proc_id=proc.pid)
 
-    def get_installed_plugins(self) -> List[InstalledPlugin]:
-        return self._engine.find_installed_plugins(OFFICIAL_PLUGINS_PATH)
+    def get_local_plugins(self) -> List[CompletePlugin]:
+        return self._engine.find_local_plugins(OFFICIAL_PLUGINS_PATH)
 
     def get_live_plugins(self) -> List[LivePlugin]:
         return []
@@ -130,7 +131,7 @@ class PluginManager:
                                 if isinstance(message, bytes):
                                     await ws.send_bytes(message)
                                 else:
-                                    await ws.send_text(message)
+                                    await ws.send_text(message) #type:ignore
 
                         await asyncio.gather(from_client(), from_upstream())
                 except (websockets.ConnectionClosed, WebSocketDisconnect):
@@ -154,7 +155,7 @@ class PluginManager:
                     rp_resp.aiter_raw(),
                     status_code=rp_resp.status_code,
                     headers=dict(rp_resp.headers),
-                    background=rp_resp.aclose,
+                    background=rp_resp.aclose, #type:ignore
                 )
                 await response(scope, receive, send)
 
@@ -174,7 +175,7 @@ class PluginManager:
         await self._engine.stop_plugin(slug=slug)
         del self._redirect_mappings[slug]
 
-    def install_and_track(self, plugin: MarketplacePlugin, plugins_path: str) -> Task:
+    def install_and_track(self, plugin: MarketplacePlugin, plugins_path: Path) -> Task:
         slug = plugin.core.slug
         self._install_progress[slug] = []
 
@@ -193,6 +194,10 @@ class PluginManager:
 
     def get_install_progress(self, slug: str) -> List[str]:
         return self._install_progress.get(slug, [])
+    
+    def clear_install_task(self, slug: str):
+        self._install_tasks.pop(slug, None)
+        self._install_progress.pop(slug, None)
 
 
 _manager: PluginManager | None = None

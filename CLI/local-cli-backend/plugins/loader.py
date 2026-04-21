@@ -4,7 +4,6 @@ import importlib
 import json
 from fastapi import APIRouter
 from typing import Dict, List, Optional
-from calculator_router import api_router as calculate_router
 
 # Import feature config loader
 try:
@@ -31,12 +30,12 @@ def get_plugin_order(plugins_dir: str) -> Optional[List[str]]:
             print(f"⚠️  Warning: Could not read plugin_order.json: {e}")
     return None
 
-def load_plugin_libs(app: APIRouter, loaded_plugins: List):
-    app.include_router(calculate_router)
-    loaded_plugins.append("calculator")
-    print(f"Added calculate subrouter from packaged plugin")
-    print(app.routes)
-    return app
+# def load_plugin_libs(app: APIRouter, loaded_plugins: List):
+#     app.include_router(calculate_router)
+#     loaded_plugins.append("calculator")
+#     print(f"Added calculate subrouter from packaged plugin")
+#     print(app.routes)
+#     return app
 
 def load_plugins(app):
     """
@@ -132,8 +131,8 @@ def load_plugins(app):
         except Exception as e:
             print(f"❌ Failed to load {plugin_name}: {e}")
 
-    app = load_plugin_libs(app, loaded_plugins)
-    print(f"Loaded:")
+    # app = load_plugin_libs(app, loaded_plugins)
+    # print(f"Loaded:")
     print(loaded_plugins)
     
     print(f"🔌 Plugin loading complete! Loaded: {loaded_plugins}")

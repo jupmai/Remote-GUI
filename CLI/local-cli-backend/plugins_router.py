@@ -13,8 +13,6 @@ from decorators import wrap_sse_stream
 from feature_config_loader import (
     disable_plugin_feature,
     enable_plugin_feature,
-    load_feature_config,
-    write_feature_config,
 )
 from plugins.base import InstalledPlugin, MarketplacePlugin
 from plugins.engine import get_plugin_engine
@@ -71,14 +69,38 @@ def get_main():
     return RedirectResponse("/plugins/", 301)
 
 
+# @plugins_router.get("/")
+# async def return_plugins():
+#     installed_plugins = manager.get_installed_plugins()
+#     return [
+#         {
+#             "id": plugin.core.id,
+#             "name": plugin.core.name,
+#             "slug": plugin.core.slug,
+#             "version": plugin.core.version,
+#             "description": plugin.core.description,
+#             "remoteUrl": f"/official-plugins/{plugin.core.slug}/frontend/build/remoteEntry.js",
+#             "download_link": f"",
+#             "readme_link": f"",
+#             "thumbnail": f"",
+#         }
+#         for plugin in installed_plugins
+#     ]
+
 @plugins_router.get("/")
 async def return_plugins():
-    installed_plugins = manager.get_installed_plugins()
+    local_plugins = manager.get_local_plugins()
+    return [
+        {
+            **p.flatten(),
+            "remoteUrl": f"/official-plugins/{p.core.slug}/frontend/build/remoteEntry.js",
+        }
+        for p in local_plugins
+    ]
     return [
         {
             "id": plugin.core.id,
             "name": plugin.core.name,
-            # "slug": plugin.core.slug.replace("-", "_"),
             "slug": plugin.core.slug,
             "version": plugin.core.version,
             "description": plugin.core.description,
@@ -90,6 +112,7 @@ async def return_plugins():
 
 @plugins_router.post("/install")
 async def post_install_plugin(req: InstallRequest):
+    print(f"Installing: {req.plugin.core.slug} from {req.plugin.download_link}")
     try:
         slug = req.plugin.core.slug
         curr_installs = manager.get_install_tasks()
@@ -97,10 +120,12 @@ async def post_install_plugin(req: InstallRequest):
 
         if install_task is not None:
             if not install_task.done():
-                return {"error": "Install already in progress for this plugin"}, 409
+                raise HTTPException(
+                    409, detail="Install already in progress for this plugin"
+                )
             result = install_task.result()
             if isinstance(result, InstalledPlugin):
-                return {"error": "Plugin already installed"}, 400
+                raise HTTPException(400, detail="Plugin already installed")
 
         manager.install_and_track(req.plugin, OFFICIAL_PLUGINS_PATH)
         return {"slug": slug, "status": "installing"}
@@ -136,16 +161,20 @@ async def get_install_status(slug: str):
 @plugins_router.post("/uninstall")
 async def post_uninstall_plugin(req: ModificationRequest):
     try:
-        installed = manager.get_installed_plugins()
+        installed = manager.get_local_plugins()
         for plugin in installed:
             if plugin.core.slug == req.slug:
-                await uninstall_plugin(plugin)
+                print(f"Uninstalling matched plugin: {req.slug}")
+                await uninstall_plugin(plugin.to_installed())
 
-                config = load_feature_config()
-                del config["plugins"][req.plugin.core.slug]
+                # config = load_feature_config()
+                # del config["plugins"][plugin.core.slug]
+                # write_feature_config(config)
 
-                write_feature_config(config)
+                manager.clear_install_task(req.slug)
                 return
+
+        print(f"Couldn't find {req.slug} to uninstall")
         raise HTTPException(400, f"{req.slug} not installed")
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -156,11 +185,11 @@ async def post_uninstall_plugin(req: ModificationRequest):
 @plugins_router.patch("/enable")
 async def enable_plugin(req: ModificationRequest):
     # try:
-    installed = manager.get_installed_plugins()
+    installed = manager.get_local_plugins()
     for plugin in installed:
         if plugin.core.slug == req.slug:
             print("Starting plugin from engine")
-            await manager.start_plugin(plugin)
+            await manager.start_plugin(plugin.to_installed())
             enable_plugin_feature(req.slug)
             return
 
@@ -172,8 +201,8 @@ async def enable_plugin(req: ModificationRequest):
 @plugins_router.patch("/disable")
 async def disable_plugin(req: ModificationRequest):
     try:
-        installed = manager.get_installed_plugins()
-        for plugin in installed:
+        local_plugins = manager.get_local_plugins()
+        for plugin in local_plugins:
             if plugin.core.slug == req.slug:
                 print("Stopping plugin from engine")
                 await manager.stop_plugin(req.slug)
@@ -185,7 +214,7 @@ async def disable_plugin(req: ModificationRequest):
 @plugins_router.get("/installed")
 async def list_plugins(req: Request):
     try:
-        plugins = manager.get_installed_plugins()
+        plugins = manager.get_local_plugins()
         return plugins
     except Exception:
         raise HTTPException(500, "Faild finding plugins")

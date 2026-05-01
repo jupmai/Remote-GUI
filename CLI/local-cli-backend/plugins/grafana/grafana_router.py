@@ -10,7 +10,7 @@ import os
 api_router = APIRouter(prefix="/grafana", tags=["Grafana"])
 
 # Default Grafana URL (can be overridden via environment variable)
-DEFAULT_GRAFANA_URL = os.getenv("GRAFANA_URL", "http://localhost:4000/d/adf847s/anylog-gui?kiosk&from=now-5m&to=now&refresh=5s")
+DEFAULT_GRAFANA_URL = os.getenv("GRAFANA_URL", "http://50.116.9.238:3000/d/adf847s/anylog-gui?kiosk&from=now-5m&to=now&refresh=5s")
 
 # Request/Response models
 class GrafanaConfig(BaseModel):

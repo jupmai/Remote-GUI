@@ -4,7 +4,6 @@
     "reportgenerator",
     "nodecheck",
     "calculator",
-    "mcpclient",
-    "stocks"
+    "mcpclient"
   ]
 }

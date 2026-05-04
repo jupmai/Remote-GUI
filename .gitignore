@@ -1,2 +1,12 @@
+<<<<<<< HEAD
 # Created by venv; see https://docs.python.org/3/library/venv.html
 *
+=======
+.DS_Store
+venv*/
+.venv*/
+.idea/
+__pycache__/
+outputs/
+*.code-workspace
+>>>>>>> upstream/feature/plugin-marketplace

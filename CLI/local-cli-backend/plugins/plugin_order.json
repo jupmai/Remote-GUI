@@ -3,7 +3,7 @@
     "grafana",
     "reportgenerator",
     "nodecheck",
-    "calculator",
-    "mcpclient"
+    "mcpclient",
+    "calculator"
   ]
 }

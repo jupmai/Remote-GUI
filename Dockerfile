@@ -46,7 +46,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # Copy Python dependencies and install in virtualenv
 COPY requirements.txt .
 RUN pip install --upgrade pip wheel \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install uv
 
 # Clone AnyLog-API and install into virtualenv
 RUN git clone --branch main --depth 1 https://github.com/AnyLog-co/AnyLog-API /tmp/AnyLog-API \

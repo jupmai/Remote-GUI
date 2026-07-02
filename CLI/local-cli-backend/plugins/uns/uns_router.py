@@ -27,10 +27,12 @@ class QueryTableRequest(BaseModel):
     conn: str
     dbms: str
     table: str
+    time_mode: str = "relative"  # relative, absolute, or period
     time_value: float = 5.0  # Time range value
     time_unit: str = "minute"  # Time unit: minute, hour, day, etc.
     start_time: Optional[str] = None  # Absolute range start, e.g. "2026-06-29 16:00:00"
     end_time: Optional[str] = None  # Absolute range end, e.g. "2026-06-29 17:00:00"
+    period_reference_time: Optional[str] = None  # Period anchor search reference; empty means now()
     where: Optional[str] = None  # Optional policy where clause (e.g. "rig_id='RIG-TX-001'")
     column: Optional[str] = None  # When set, only fetch time_column and this column
     time_column: Optional[str] = "insert_timestamp"  # Time-based column for filtering: insert_timestamp or timestamp
@@ -215,7 +217,9 @@ async def query_table(request: QueryTableRequest):
         except (TypeError, ValueError):
             time_value = 5.0
 
-        time_unit = request.time_unit or "minute"
+        time_unit = (request.time_unit or "minute").strip().lower()
+        if time_unit not in ("minute", "hour", "day", "week", "month", "year"):
+            time_unit = "minute"
 
         # Convert to int if it's a whole number, otherwise keep as float
         try:
@@ -237,14 +241,19 @@ async def query_table(request: QueryTableRequest):
 
         start_time = (request.start_time or "").strip().replace("'", "''")
         end_time = (request.end_time or "").strip().replace("'", "''")
-        if start_time and end_time:
+        where_clause = (request.where or "").strip()
+        time_mode = (request.time_mode or "relative").strip().lower()
+        if time_mode == "absolute" and start_time and end_time:
             time_filter = f"{time_col} >= '{start_time}' AND {time_col} < '{end_time}'"
+        elif time_mode == "period":
+            period_reference_time = (request.period_reference_time or "").strip().replace("'", "''")
+            period_reference = f"'{period_reference_time}'" if period_reference_time else "NOW()"
+            time_filter = f"period({time_unit}, {time_value_str}, {period_reference}, {time_col})"
         else:
             time_filter = f"period({time_unit}, {time_value_str}, NOW(), {time_col})"
 
         # Base time filter using selected time column
         sql_query = f'SELECT {select_clause} FROM {table_quoted} WHERE {time_filter}'
-        where_clause = (request.where or "").strip()
         if where_clause:
             sql_query += f" AND {where_clause}"
         command = f'run client () sql {request.dbms} format = table "{sql_query}"'

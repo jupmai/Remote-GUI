@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './UNSPage.css';
 import UNSSidePanel from './UNSSidePanel';
 import UNSCompareGraphs from './UNSCompareGraphs';
-import { formatDateTimeLocalForBackend, getUNSTimeRangeError } from './UNSTimeUtils';
+import { formatDateTimeLocalForBackend, formatUNSTimeRangeLabel, getUNSTimeRangeError } from './UNSTimeUtils';
 import { getRoot, getChildren, checkChildren, queryTable, checkTable } from './uns_api';
 
 const ROOT_QUERY_UNS_DATA = 'blockchain get root policies exclude cluster';
@@ -35,6 +35,7 @@ const UNSPage = ({ node }) => {
   const [timeMode, setTimeMode] = useState('relative');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [periodReferenceTime, setPeriodReferenceTime] = useState('');
   const [timeRangeErrorDismissed, setTimeRangeErrorDismissed] = useState(false);
   const [timeColumn, setTimeColumn] = useState('timestamp'); // Time column: timestamp or insert_timestamp
   const [sqlData, setSqlData] = useState(null); // SQL query results
@@ -592,6 +593,20 @@ const UNSPage = ({ node }) => {
           needsFetch: source.needsFetch === true && !(Array.isArray(source.data) && source.data.length > 0),
         }))
       : [];
+    const removedSources = Array.isArray(graph.removedSources)
+      ? graph.removedSources
+        .filter((source) => source && source.dbms && source.table)
+        .map((source) => ({
+          ...source,
+          identityKey: source.identityKey || getCompareSourceIdentityFromParts(source),
+          data: Array.isArray(source.data) ? source.data : [],
+          columns: Array.isArray(source.columns) ? source.columns : [],
+          loading: false,
+          error: source.error || null,
+          needsFetch: false,
+          removedAt: source.removedAt || null,
+        }))
+      : [];
 
     return {
       ...graph,
@@ -600,11 +615,13 @@ const UNSPage = ({ node }) => {
       timeMode: graph.timeMode || 'relative',
       startTime: graph.startTime || '',
       endTime: graph.endTime || '',
+      periodReferenceTime: graph.periodReferenceTime || '',
       timeColumn: graph.timeColumn || 'timestamp',
       refreshRate: graph.refreshRate || 20,
       liveMode: false,
       timeRangeErrorDismissed: Boolean(graph.timeRangeErrorDismissed),
       sources,
+      removedSources,
     };
   };
 
@@ -1319,10 +1336,12 @@ const UNSPage = ({ node }) => {
       const result = await queryTable(node, {
         dbms,
         table,
+        time_mode: timeMode,
         time_value: timeRangeValue,
         time_unit: timeRangeUnit,
         start_time: timeMode === 'absolute' ? formatDateTimeLocalForBackend(startTime) : '',
         end_time: timeMode === 'absolute' ? formatDateTimeLocalForBackend(endTime) : '',
+        period_reference_time: timeMode === 'period' ? formatDateTimeLocalForBackend(periodReferenceTime) : '',
         where: whereClause,
         column,
         time_column: timeColumn,
@@ -1373,10 +1392,12 @@ const UNSPage = ({ node }) => {
       timeMode: 'relative',
       startTime: '',
       endTime: '',
+      periodReferenceTime: '',
       timeColumn,
       refreshRate: 20,
       liveMode: false,
       sources: [],
+      removedSources: [],
     };
 
     setCompareGraphs((prev) => [...prev, graph]);
@@ -1417,11 +1438,17 @@ const UNSPage = ({ node }) => {
     if (!itemData?.dbms || !itemData?.table) {
       return null;
     }
+    const pathParts = [...currentPath.map((pathItem) => pathItem.name), getItemName(item)]
+      .filter(Boolean)
+      .map((part) => String(part).trim())
+      .filter(Boolean);
+    const path = ['Root', 'uns', ...pathParts].join('/');
 
     return {
       id: `compare-source-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: getItemName(item),
       type: getItemType(item),
+      path,
       dbms: itemData.dbms,
       table: itemData.table,
       where: itemData.where || '',
@@ -1457,10 +1484,12 @@ const UNSPage = ({ node }) => {
         timeMode: 'relative',
         startTime: '',
         endTime: '',
+        periodReferenceTime: '',
         timeColumn,
         refreshRate: 20,
         liveMode: false,
         sources: [],
+        removedSources: [],
       };
       targetGraphId = graphToCreate.id;
       setActiveCompareGraphId(targetGraphId);
@@ -1483,6 +1512,9 @@ const UNSPage = ({ node }) => {
         return {
           ...graph,
           sources: [...graph.sources, source],
+          removedSources: (graph.removedSources || []).filter((removed) => (
+            (removed.identityKey || getCompareSourceIdentityFromParts(removed)) !== source.identityKey
+          )),
         };
       });
     });
@@ -1810,6 +1842,21 @@ const UNSPage = ({ node }) => {
   };
 
   const singleChartTimeRangeError = getUNSTimeRangeError({ timeMode, startTime, endTime });
+  const singleChartTimeRangeLabel = formatUNSTimeRangeLabel({
+    timeMode,
+    timeRangeValue,
+    timeRangeUnit,
+    startTime,
+    endTime,
+    periodReferenceTime,
+  });
+  const selectedItemPath = selectedItem
+    ? ['Root', 'uns', ...currentPath.map((pathItem) => pathItem.name), getItemName(selectedItem)]
+      .filter(Boolean)
+      .map((part) => String(part).trim())
+      .filter(Boolean)
+      .join('/')
+    : '';
 
   return (
     <div className="uns-container">
@@ -1937,6 +1984,8 @@ const UNSPage = ({ node }) => {
             timeMode={timeMode}
             startTime={startTime}
             endTime={endTime}
+            periodReferenceTime={periodReferenceTime}
+            timeRangeLabel={singleChartTimeRangeLabel}
             timeRangeError={singleChartTimeRangeError}
             timeRangeErrorDismissed={timeRangeErrorDismissed}
             timeColumn={timeColumn}
@@ -1953,6 +2002,7 @@ const UNSPage = ({ node }) => {
             onTimeModeChange={setSingleChartTimeControl(setTimeMode)}
             onStartTimeChange={setSingleChartTimeControl(setStartTime)}
             onEndTimeChange={setSingleChartTimeControl(setEndTime)}
+            onPeriodReferenceTimeChange={setSingleChartTimeControl(setPeriodReferenceTime)}
             onTimeRangeErrorDismiss={() => setTimeRangeErrorDismissed(true)}
             onFetchTimeRange={fetchSqlData}
             onCompareItem={addItemToCompare}
@@ -1963,6 +2013,7 @@ const UNSPage = ({ node }) => {
             getItemData={getItemData}
             chartYKey={chartYKey}
             onChartYKeyChange={setChartYKey}
+            unsPath={selectedItemPath}
           />
         </div>
       </div>

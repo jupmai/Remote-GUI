@@ -24,3 +24,28 @@ export const getUNSTimeRangeError = (timeConfig) => {
 
   return 'Start time must be before end time.';
 };
+
+export const formatUNSTimeRangeLabel = ({
+  timeMode = 'relative',
+  timeRangeValue = 5,
+  timeRangeUnit = 'minute',
+  startTime = '',
+  endTime = '',
+  periodReferenceTime = '',
+} = {}) => {
+  if (timeMode === 'absolute') {
+    return `${startTime || 'start'} to ${endTime || 'end'}`;
+  }
+
+  if (timeMode === 'period') {
+    const unitLabel = `${timeRangeUnit}${Number(timeRangeValue) !== 1 ? 's' : ''}`;
+    const parts = [
+      'Period',
+      `Reference: ${periodReferenceTime || 'now()'}`,
+      `Interval: ${timeRangeValue || 1} ${unitLabel}`,
+    ];
+    return parts.join(' | ');
+  }
+
+  return `Last ${timeRangeValue} ${timeRangeUnit}${Number(timeRangeValue) !== 1 ? 's' : ''}`;
+};

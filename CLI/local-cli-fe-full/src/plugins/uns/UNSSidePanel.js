@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import './UNSPage.css';
 import UNSLineChart from './UNSLineChart';
 import UNSColumnDetails from './UNSColumnDetails';
+import { getUNSEffectiveYKey } from './UNSLineChart';
 import UNSTimeControls from './UNSTimeControls';
 import { exportToCSV, exportToPDF } from './unsExportUtils';
 import { getDataNodes } from './uns_api';
@@ -19,6 +20,8 @@ const UNSSidePanel = ({
   timeMode = 'relative',
   startTime = '',
   endTime = '',
+  periodReferenceTime = '',
+  timeRangeLabel = '',
   timeRangeError = '',
   timeRangeErrorDismissed = false,
   timeColumn,
@@ -28,6 +31,7 @@ const UNSSidePanel = ({
   onTimeModeChange,
   onStartTimeChange,
   onEndTimeChange,
+  onPeriodReferenceTimeChange,
   onTimeRangeErrorDismiss,
   onTimeColumnChange,
   onFetchTimeRange,
@@ -39,6 +43,7 @@ const UNSSidePanel = ({
   chartYKey,
   onChartYKeyChange,
   isCompared = false,
+  unsPath = '',
 }) => {
   const itemData = selectedItem ? getItemData(selectedItem) : null;
   const hasTableMeta = itemData && itemData.dbms && itemData.table;
@@ -167,15 +172,38 @@ const UNSSidePanel = ({
     } catch (e) {
       console.warn('Chart image not available for PDF:', e);
     }
+    const metric = getUNSEffectiveYKey({
+      data: sqlData,
+      chartYKey,
+      preferredColumn: itemData?.column,
+    });
     exportToPDF(sqlData, chartUrl, {
       title: itemData?.table ? `UNS: ${itemData.table}` : 'UNS Report',
       tableTitle: 'Table Data',
       filename: getExportFilename(),
+      path: unsPath,
       name: selectedItem ? getItemName(selectedItem) : null,
       type: selectedItem ? getItemType(selectedItem) : null,
+      id: selectedItem ? getItemId(selectedItem) : null,
       dbms: itemData?.dbms ?? null,
       table: itemData?.table ?? null,
+      column: itemData?.column ?? null,
+      where: itemData?.where ?? null,
       description: itemData?.description ?? null,
+      columns: tableColumns,
+      dataNodes: Array.isArray(dataNodes) ? dataNodes : [],
+      policy: itemData,
+      chartYKey: metric,
+      legend: [{
+        label: selectedItem ? getItemName(selectedItem) : itemData?.table || 'UNS item',
+        detail: metric || itemData?.column || '',
+        color: '#2563eb',
+      }],
+      timeRangeLabel,
+      timeMode,
+      periodReferenceTime: periodReferenceTime || 'now()',
+      periodIntervalType: timeRangeUnit,
+      periodIntervalCount: timeRangeValue,
     });
   };
 
@@ -235,6 +263,7 @@ const UNSSidePanel = ({
                       timeMode={timeMode}
                       startTime={startTime}
                       endTime={endTime}
+                      periodReferenceTime={periodReferenceTime}
                       timeColumn={timeColumn}
                       loading={sqlLoading || Boolean(timeRangeError)}
                       liveMode={liveMode}
@@ -244,6 +273,7 @@ const UNSSidePanel = ({
                       onTimeModeChange={onTimeModeChange}
                       onStartTimeChange={onStartTimeChange}
                       onEndTimeChange={onEndTimeChange}
+                      onPeriodReferenceTimeChange={onPeriodReferenceTimeChange}
                       onTimeColumnChange={onTimeColumnChange}
                       onRefresh={() => {
                         if (showTableSection) {
@@ -275,8 +305,7 @@ const UNSSidePanel = ({
                 <div className="uns-sql-tab-content">
                     <div className="uns-sql-header">
                       <strong>
-                        Table Data (Last {timeRangeValue} {timeRangeUnit}
-                        {timeRangeValue !== 1 ? 's' : ''}){liveMode ? '' : ':'}
+                        Table Data ({timeRangeLabel || `Last ${timeRangeValue} ${timeRangeUnit}${timeRangeValue !== 1 ? 's' : ''}`}){liveMode ? '' : ':'}
                       </strong>
                       {liveMode && (
                         <span className="uns-live-badge">

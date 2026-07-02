@@ -31,10 +31,23 @@ export async function checkChildren(conn, itemId) {
   return unsRequest("/uns/check-children", { conn, item_id: itemId });
 }
 
-export async function queryTable(conn, { dbms, table, time_value, time_unit, start_time, end_time, where, column, time_column }) {
-  const body = { conn, dbms, table, time_value, time_unit };
+export async function queryTable(conn, {
+  dbms,
+  table,
+  time_mode,
+  time_value,
+  time_unit,
+  start_time,
+  end_time,
+  period_reference_time,
+  where,
+  column,
+  time_column,
+}) {
+  const body = { conn, dbms, table, time_mode, time_value, time_unit };
   if (start_time?.trim()) body.start_time = start_time.trim();
   if (end_time?.trim()) body.end_time = end_time.trim();
+  if (period_reference_time?.trim()) body.period_reference_time = period_reference_time.trim();
   if (where?.trim()) body.where = where.trim();
   if (column?.trim()) body.column = column.trim();
   if (time_column?.trim()) body.time_column = time_column.trim();

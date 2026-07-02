@@ -30,6 +30,8 @@ import MarkdownRenderer from './MarkdownRenderer';
 import usePageVisibility from '../../hooks/usePageVisibility';
 import MaskedTextInput from '../../components/MaskedTextInput';
 import MaskedNodeAddress from '../../components/MaskedNodeAddress';
+import logo from '../../assets/AnyLog_EDM_logo.png';
+import { getLicenseInfo } from '../../services/api';
 
 export const pluginMetadata = {
   name: 'MCP Client',
@@ -161,6 +163,70 @@ const stringifyPayload = (payload) => {
     return String(payload ?? '');
   }
 };
+
+const loadImageDataUrl = (src) => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    resolve(canvas.toDataURL('image/png'));
+  };
+  image.onerror = reject;
+  image.src = src;
+});
+
+const shortenPdfText = (value = '', maxLength = 14000) => {
+  const text = String(value || '');
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}\n\n[Log truncated for PDF readability. Full log remains available in the chat session.]`;
+};
+
+const buildObservationLabel = (observation, index) => {
+  const status = observation.status || 'pending';
+  const elapsed = typeof observation.elapsedMs === 'number' ? `, ${formatDuration(observation.elapsedMs)}` : '';
+  return `${index + 1}. ${observation.toolName || observation.tool_name || 'MCP request'} (${status}${elapsed})`;
+};
+
+const buildObservationLogText = (observation, index) => {
+  const request = stringifyPayload(observation.arguments);
+  const sections = [
+    buildObservationLabel(observation, index),
+    `Status: ${observation.status || 'pending'}`,
+    typeof observation.elapsedMs === 'number' ? `Request to response: ${formatDuration(observation.elapsedMs)}` : '',
+    typeof observation.totalElapsedMs === 'number' ? `Conversation elapsed at completion: ${formatDuration(observation.totalElapsedMs)}` : '',
+    '',
+    'REQUEST',
+    request,
+  ].filter(Boolean);
+
+  if (observation.response !== undefined) {
+    sections.push('', 'RESPONSE', stringifyPayload(observation.response));
+  }
+  if (observation.error) {
+    sections.push('', 'ERROR', String(observation.error));
+  }
+  if (observation.exception) {
+    sections.push('', 'FULL EXCEPTION', String(observation.exception));
+  }
+
+  return shortenPdfText(sections.join('\n'), 18000);
+};
+
+const collectPdfObservations = (messages = []) => (
+  messages.flatMap((message, messageIndex) => (
+    (message.observations || []).map((observation, observationIndex) => ({
+      ...observation,
+      messageIndex,
+      observationIndex,
+      messageRole: message.type === 'error' ? 'Error' : 'Assistant',
+      messageId: message.id,
+    }))
+  ))
+);
 
 const formatBriefError = (message = '') => {
   const firstLine = String(message || 'Failed to process question.').split('\n').find(Boolean) || 'Failed to process question.';
@@ -446,6 +512,7 @@ const McpclientPage = ({ node }) => {
   const [instructionsSaved, setInstructionsSaved] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
   const [activeChatId, setActiveChatId] = useState('');
+  const [license, setLicense] = useState(null);
 
   const abortControllersRef = useRef({});
   const streamRequestIdsRef = useRef({});
@@ -457,6 +524,26 @@ const McpclientPage = ({ node }) => {
   const userEditedAnylogUrlRef = useRef(false);
   const previousNodeMcpUrlRef = useRef(nodeMcpUrl);
   const applyingChatRef = useRef(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    if (!node) {
+      setLicense(null);
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    getLicenseInfo({ connectInfo: getNodeValue(node) || node }).then((licenseInfo) => {
+      if (isCurrent) {
+        setLicense(licenseInfo);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [node]);
 
   const refreshConnectionStatus = async () => {
     try {
@@ -1286,49 +1373,323 @@ const McpclientPage = ({ node }) => {
 
     try {
       const { default: jsPDF } = await import('jspdf');
-      const doc = new jsPDF();
-      const margin = 18;
+      const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+      const logoDataUrl = await loadImageDataUrl(logo);
+      const margin = 36;
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const maxWidth = pageWidth - margin * 2;
-      let y = margin;
+      const exportedAt = new Date();
+      const licensedTo = license?.company || license?.issued_to || license?.customer || 'Unlicensed / unavailable';
+      const activeTitle = activeChat?.title || deriveChatTitle(answers, 'MCP Client Chat');
+      const exportMessages = answers.filter((msg) => msg.type !== 'thinking');
+      const observations = collectPdfObservations(exportMessages);
+      const logGroups = exportMessages
+        .map((message, messageIndex) => ({
+          message,
+          messageIndex,
+          observations: message.observations || [],
+        }))
+        .filter((group) => group.observations.length > 0);
+      const isDarkPdf = document.documentElement.dataset.theme === 'dark';
+      const palette = isDarkPdf ? {
+        page: [5, 9, 20],
+        topbar: [7, 21, 39],
+        topbarMuted: [196, 207, 223],
+        surface: [13, 21, 36],
+        surfaceMuted: [23, 34, 56],
+        field: [7, 17, 31],
+        text: [247, 251, 255],
+        heading: [255, 255, 255],
+        muted: [196, 207, 223],
+        subtle: [146, 163, 188],
+        border: [55, 80, 111],
+        borderSoft: [45, 64, 90],
+        userBg: [14, 45, 76],
+        userBorder: [102, 179, 255],
+        errorBg: [59, 17, 23],
+        errorBorder: [127, 38, 48],
+        errorText: [255, 180, 189],
+        codeBg: [7, 17, 31],
+        codeText: [230, 241, 255],
+        primary: [102, 179, 255],
+      } : {
+        page: [255, 255, 255],
+        topbar: [16, 24, 40],
+        topbarMuted: [184, 195, 216],
+        surface: [255, 255, 255],
+        surfaceMuted: [248, 250, 252],
+        field: [248, 250, 252],
+        text: [23, 32, 51],
+        heading: [23, 32, 51],
+        muted: [70, 85, 110],
+        subtle: [102, 116, 139],
+        border: [215, 221, 232],
+        borderSoft: [200, 210, 224],
+        userBg: [248, 251, 255],
+        userBorder: [191, 219, 254],
+        errorBg: [255, 248, 248],
+        errorBorder: [254, 205, 211],
+        errorText: [127, 29, 29],
+        codeBg: [248, 250, 252],
+        codeText: [17, 24, 39],
+        primary: [37, 99, 235],
+      };
+      let y = 118;
 
-      const writeWrapped = (text, size = 9, style = 'normal') => {
-        doc.setFont('helvetica', style);
-        doc.setFontSize(size);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        lines.forEach((line) => {
-          if (y > pageHeight - margin) {
-            doc.addPage();
-            y = margin;
-          }
-          doc.text(line, margin, y);
-          y += size * 0.45 + 3;
-        });
+      doc.setProperties({
+        title: `MCP Client Chat - ${activeTitle}`,
+        subject: 'AnyLog MCP Client chat export with MCP interaction logs',
+        author: 'AnyLog Remote GUI',
+        creator: 'AnyLog Remote GUI',
+      });
+
+      const drawHeader = () => {
+        doc.setFillColor(...palette.page);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        doc.setFillColor(...palette.topbar);
+        doc.rect(0, 0, pageWidth, 74, 'F');
+        doc.addImage(logoDataUrl, 'PNG', margin, 18, 168, 36);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(255, 255, 255);
+        doc.text('MCP Client Chat Export', pageWidth - margin, 28, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(...palette.topbarMuted);
+        doc.text(`Licensed to: ${licensedTo}`, pageWidth - margin, 44, { align: 'right' });
+        doc.text(exportedAt.toLocaleString(), pageWidth - margin, 59, { align: 'right' });
       };
 
-      writeWrapped('MCP Client Chat Export', 18, 'bold');
-      writeWrapped(`Exported: ${new Date().toLocaleString()}`, 9);
-      writeWrapped(`Model: ${ollamaModel || 'Not selected'}`, 9);
-      writeWrapped(`LLM endpoint: ${normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama'}`, 9);
-      y += 4;
+      const drawFooter = () => {
+        const pageNumber = doc.internal.getNumberOfPages();
+        doc.setDrawColor(...palette.border);
+        doc.line(margin, pageHeight - 32, pageWidth - margin, pageHeight - 32);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(...palette.subtle);
+        doc.text('AnyLog Remote GUI | MCP Client', margin, pageHeight - 17);
+        doc.text(`Page ${pageNumber}`, pageWidth - margin, pageHeight - 17, { align: 'right' });
+      };
 
-      answers
-        .filter((msg) => msg.type !== 'thinking')
-        .forEach((msg) => {
-          const role = msg.type === 'user' ? 'You' : msg.type === 'error' ? 'Error' : 'Assistant';
-          if (y > pageHeight - margin - 20) {
-            doc.addPage();
-            y = margin;
+      const addPage = () => {
+        drawFooter();
+        doc.addPage();
+        drawHeader();
+        y = 104;
+      };
+
+      const ensureSpace = (height) => {
+        if (y + height > pageHeight - 48) addPage();
+      };
+
+      const writeWrapped = ({
+        text,
+        x = margin,
+        width = maxWidth,
+        size = 10,
+        style = 'normal',
+        color = palette.text,
+        lineGap = 4,
+      }) => {
+        doc.setFont('helvetica', style);
+        doc.setFontSize(size);
+        doc.setTextColor(...color);
+        const lines = doc.splitTextToSize(text || '', width);
+        lines.forEach((line) => {
+          ensureSpace(size + lineGap + 2);
+          doc.text(line, x, y);
+          y += size + lineGap;
+        });
+        return lines.length;
+      };
+
+      const drawMetaPill = (label, value, x, pillY, width) => {
+        doc.setFillColor(...palette.surfaceMuted);
+        doc.setDrawColor(...palette.border);
+        doc.roundedRect(x, pillY, width, 42, 5, 5, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(...palette.muted);
+        doc.text(label.toUpperCase(), x + 10, pillY + 15);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(...palette.text);
+        const valueLines = doc.splitTextToSize(value || '-', width - 20);
+        doc.text(valueLines.slice(0, 2), x + 10, pillY + 29);
+      };
+
+      const drawMessage = (msg) => {
+        const role = msg.type === 'user' ? 'You' : msg.type === 'error' ? 'Error' : (assistantName.trim() || DEFAULT_ASSISTANT_NAME);
+        const isUser = msg.type === 'user';
+        const isError = msg.type === 'error';
+        const content = stripMarkdown(msg.content || '');
+        const bodyLines = doc.splitTextToSize(content || ' ', maxWidth - 34);
+        const headerHeight = 27;
+        const bodyHeight = Math.max(34, bodyLines.length * 14 + 24);
+        const totalHeight = headerHeight + bodyHeight;
+
+        ensureSpace(Math.min(totalHeight, pageHeight - 150));
+        const cardY = y;
+        const bg = isError ? palette.errorBg : isUser ? palette.userBg : palette.surface;
+        const border = isError ? palette.errorBorder : isUser ? palette.userBorder : palette.border;
+
+        doc.setFillColor(...bg);
+        doc.setDrawColor(...border);
+        doc.roundedRect(margin, cardY, maxWidth, Math.min(totalHeight, pageHeight - cardY - 48), 7, 7, 'FD');
+        doc.setFillColor(...palette.surfaceMuted);
+        doc.rect(margin, cardY, maxWidth, headerHeight, 'F');
+        doc.setDrawColor(...palette.border);
+        doc.line(margin, cardY + headerHeight, pageWidth - margin, cardY + headerHeight);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(...palette.muted);
+        doc.text(role.toUpperCase(), margin + 14, cardY + 18);
+        if (msg.type === 'assistant' && typeof msg.totalElapsedMs === 'number') {
+          doc.text(formatDuration(msg.totalElapsedMs).toUpperCase(), pageWidth - margin - 14, cardY + 18, { align: 'right' });
+        }
+
+        y = cardY + headerHeight + 18;
+        bodyLines.forEach((line) => {
+          if (y > pageHeight - 62) {
+            addPage();
+            doc.setFillColor(...bg);
+            doc.setDrawColor(...border);
+            doc.roundedRect(margin, y, maxWidth, pageHeight - y - 48, 7, 7, 'FD');
+            y += 16;
           }
-          doc.setTextColor(msg.type === 'error' ? 180 : 30, msg.type === 'user' ? 90 : 30, msg.type === 'assistant' ? 90 : 30);
-          writeWrapped(role, 11, 'bold');
-          doc.setTextColor(0, 0, 0);
-          writeWrapped(stripMarkdown(msg.content), 9);
-          y += 5;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+          doc.setTextColor(...(isError ? palette.errorText : palette.text));
+          doc.text(line, margin + 17, y);
+          y += 14;
         });
 
-      doc.save(`mcp-chat-${new Date().toISOString().slice(0, 10)}.pdf`);
+        y += 14;
+      };
+
+      const drawLogCard = ({ observation, observationIndex }) => {
+        const title = buildObservationLabel(observation, observationIndex);
+        const elapsed = typeof observation.elapsedMs === 'number' ? formatDuration(observation.elapsedMs) : 'Pending';
+        const completedAt = typeof observation.totalElapsedMs === 'number' ? formatDuration(observation.totalElapsedMs) : '-';
+        const accent = observation.status === 'error' ? [220, 38, 38] : observation.status === 'complete' ? [22, 163, 74] : [148, 163, 184];
+        const logText = buildObservationLogText(observation, observationIndex);
+        const logLines = doc.splitTextToSize(logText, maxWidth - 48);
+        const lineHeight = 10;
+        let lineIndex = 0;
+        let part = 0;
+
+        while (lineIndex < logLines.length || part === 0) {
+          const isContinuation = part > 0;
+          const headerHeight = isContinuation ? 30 : 74;
+          const minLogHeight = 58;
+          ensureSpace(headerHeight + minLogHeight + 18);
+          const availableLogHeight = Math.max(minLogHeight, pageHeight - 48 - y - headerHeight - 18);
+          const maxLinesThisPage = Math.max(6, Math.floor((availableLogHeight - 22) / lineHeight));
+          const chunk = logLines.slice(lineIndex, lineIndex + maxLinesThisPage);
+          const logHeight = Math.max(minLogHeight, chunk.length * lineHeight + 22);
+          const cardHeight = headerHeight + logHeight + 18;
+
+          const startY = y;
+
+          doc.setFillColor(...palette.surface);
+          doc.setDrawColor(...palette.border);
+          doc.roundedRect(margin, startY, maxWidth, cardHeight, 7, 7, 'FD');
+          doc.setFillColor(...accent);
+          doc.rect(margin, startY, 4, cardHeight, 'F');
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(...palette.heading);
+          doc.text(isContinuation ? `${title} continued` : title, margin + 14, startY + 20);
+
+          if (!isContinuation) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(...palette.muted);
+            doc.text(`Request to response: ${elapsed}`, margin + 14, startY + 36);
+            doc.text(`Conversation elapsed: ${completedAt}`, pageWidth - margin - 14, startY + 36, { align: 'right' });
+            doc.text('Request and response log content', margin + 14, startY + 52);
+          }
+
+          const logY = startY + headerHeight;
+          doc.setFillColor(...palette.codeBg);
+          doc.setDrawColor(...palette.borderSoft);
+          doc.roundedRect(margin + 14, logY, maxWidth - 28, logHeight, 5, 5, 'FD');
+          doc.setFont('courier', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(...palette.codeText);
+          let textY = logY + 15;
+          chunk.forEach((line) => {
+            doc.text(line, margin + 24, textY);
+            textY += lineHeight;
+          });
+
+          lineIndex += chunk.length || logLines.length;
+          part += 1;
+          y = startY + cardHeight + 12;
+        }
+      };
+
+      drawHeader();
+      writeWrapped({ text: activeTitle, size: 18, style: 'bold', color: palette.heading, lineGap: 6 });
+      y += 6;
+      drawMetaPill('Model', ollamaModel || 'Not selected', margin, y, 158);
+      drawMetaPill('LLM endpoint', normalizeEndpoint(ollamaEndpoint) || 'Backend local Ollama', margin + 170, y, 184);
+      drawMetaPill('MCP endpoint', anylogUrl || 'Not configured', margin + 366, y, maxWidth - 366);
+      y += 58;
+      if (observations.length) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(...palette.heading);
+        doc.text('MCP log appendix', margin, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(...palette.subtle);
+        doc.text(`${observations.length} request/response log${observations.length === 1 ? '' : 's'} generated from this chat. Logs appear after the transcript.`, margin, y + 16);
+        y += 36;
+      }
+
+      exportMessages.forEach(drawMessage);
+
+      if (observations.length) {
+        addPage();
+        writeWrapped({ text: 'MCP Interaction Logs', size: 18, style: 'bold', color: palette.heading, lineGap: 8 });
+        writeWrapped({
+          text: 'Each MCP request/response pair is rendered directly in the PDF with timing metadata. Long logs continue on the next page without overlapping other content.',
+          size: 10,
+          color: palette.muted,
+        });
+        y += 10;
+
+        let globalObservationIndex = 0;
+        logGroups.forEach((group, groupIndex) => {
+          ensureSpace(54 + 74 + 58 + 18);
+          const groupTitle = `${group.message.type === 'error' ? 'Error response' : 'Assistant response'} ${groupIndex + 1}`;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setTextColor(...palette.heading);
+          doc.text(groupTitle, margin, y);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(...palette.muted);
+          const responseElapsed = typeof group.message.totalElapsedMs === 'number'
+            ? `Response total: ${formatDuration(group.message.totalElapsedMs)}`
+            : 'Response total: unavailable';
+          doc.text(`${group.observations.length} MCP request/response log${group.observations.length === 1 ? '' : 's'} | ${responseElapsed}`, margin, y + 16);
+          y += 30;
+
+          group.observations.forEach((observation) => {
+            const observationIndex = globalObservationIndex;
+            globalObservationIndex += 1;
+            drawLogCard({ observation, observationIndex });
+          });
+          y += 8;
+        });
+      }
+
+      drawFooter();
+      doc.save(`mcp-chat-${exportedAt.toISOString().slice(0, 10)}.pdf`);
     } catch (pdfError) {
       setError(`Failed to export PDF: ${pdfError.message}`);
     }

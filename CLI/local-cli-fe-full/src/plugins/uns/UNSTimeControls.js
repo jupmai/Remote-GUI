@@ -9,6 +9,7 @@ const UNSTimeControls = ({
   timeMode = 'relative',
   startTime = '',
   endTime = '',
+  periodReferenceTime = '',
   timeColumn,
   loading = false,
   liveMode = false,
@@ -18,6 +19,7 @@ const UNSTimeControls = ({
   onTimeModeChange,
   onStartTimeChange,
   onEndTimeChange,
+  onPeriodReferenceTimeChange,
   onTimeColumnChange,
   onRefresh,
   onLiveModeChange,
@@ -43,6 +45,13 @@ const UNSTimeControls = ({
           >
             Between
           </button>
+          <button
+            type="button"
+            className={timeMode === 'period' ? 'active' : ''}
+            onClick={() => onTimeModeChange('period')}
+          >
+            Period
+          </button>
         </div>
       )}
       <div className="uns-time-range-controls">
@@ -67,6 +76,48 @@ const UNSTimeControls = ({
                 onChange={(event) => onEndTimeChange(event.target.value)}
                 className="uns-time-range-input"
               />
+            </label>
+          </>
+        ) : timeMode === 'period' ? (
+          <>
+            <label className="uns-time-control-field uns-time-control-wide" htmlFor={`${prefix}-period-reference-time`}>
+              <span>Reference</span>
+              <input
+                id={`${prefix}-period-reference-time`}
+                type="datetime-local"
+                value={periodReferenceTime}
+                onChange={(event) => onPeriodReferenceTimeChange?.(event.target.value)}
+                placeholder="now()"
+                className="uns-time-range-input"
+              />
+            </label>
+            <label className="uns-time-control-field" htmlFor={`${prefix}-time-range-value`}>
+              <span>Interval</span>
+              <input
+                id={`${prefix}-time-range-value`}
+                type="number"
+                min="1"
+                step="1"
+                value={timeRangeValue}
+                onChange={(event) => onTimeRangeValueChange(parseInt(event.target.value, 10) || 1)}
+                className="uns-time-range-input"
+              />
+            </label>
+            <label className="uns-time-control-field" htmlFor={`${prefix}-time-range-unit`}>
+              <span>Type</span>
+              <select
+                id={`${prefix}-time-range-unit`}
+                value={timeRangeUnit}
+                onChange={(event) => onTimeRangeUnitChange(event.target.value)}
+                className="uns-time-range-unit"
+              >
+                <option value="minute">Minutes</option>
+                <option value="hour">Hours</option>
+                <option value="day">Days</option>
+                <option value="week">Weeks</option>
+                <option value="month">Months</option>
+                <option value="year">Years</option>
+              </select>
             </label>
           </>
         ) : (
@@ -95,6 +146,8 @@ const UNSTimeControls = ({
                 <option value="hour">Hours</option>
                 <option value="day">Days</option>
                 <option value="week">Weeks</option>
+                <option value="month">Months</option>
+                <option value="year">Years</option>
               </select>
             </label>
           </>

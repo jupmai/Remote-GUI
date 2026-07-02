@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -12,6 +12,7 @@ import UNSLineChart, { getUNSEffectiveYKey, getUNSNumericColumns } from './UNSLi
 import UNSTimeControls from './UNSTimeControls';
 import { formatDateTimeLocalForBackend, getUNSTimeRangeError as getTimeRangeError } from './UNSTimeUtils';
 import { queryTable } from './uns_api';
+import { exportUNSCompareToPDF } from './unsExportUtils';
 import './UNSPage.css';
 
 const COMPARE_COLORS = [
@@ -98,9 +99,11 @@ const formatStatValue = (value) => {
   });
 };
 
-const UNSCompareLineChart = ({ sources, onSourceYKeyChange, timeColumn }) => {
+const UNSCompareLineChart = forwardRef(({ sources, onSourceYKeyChange, timeColumn }, ref) => {
   const [viewStart, setViewStart] = useState(0);
   const [viewEnd, setViewEnd] = useState(null);
+  const chartContainerRef = useRef(null);
+  const singleChartRef = useRef(null);
 
   const getThemeColor = (name, fallback) => {
     if (typeof window === 'undefined') {
@@ -160,6 +163,73 @@ const UNSCompareLineChart = ({ sources, onSourceYKeyChange, timeColumn }) => {
     setViewEnd(null);
   }, [sources, timeColumn]);
 
+  const getChartAsDataUrl = () => new Promise((resolve, reject) => {
+    if (sources.length === 1 && singleChartRef.current?.getChartAsDataUrl) {
+      singleChartRef.current.getChartAsDataUrl().then(resolve).catch(reject);
+      return;
+    }
+    if (!chartContainerRef.current) {
+      reject(new Error('Compare chart not ready'));
+      return;
+    }
+    const svgEl = chartContainerRef.current.querySelector('.recharts-wrapper svg') || chartContainerRef.current.querySelector('svg');
+    if (!svgEl) {
+      reject(new Error('Compare chart SVG not found'));
+      return;
+    }
+    const clone = svgEl.cloneNode(true);
+    const width = 900;
+    const height = 420;
+    clone.setAttribute('width', width);
+    clone.setAttribute('height', height);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const currentTheme = {
+      surface: getThemeColor('--color-surface', '#ffffff'),
+      text: getThemeColor('--color-text', '#172033'),
+      grid: getThemeColor('--chart-grid', '#d8e1ec'),
+      axis: getThemeColor('--chart-axis', '#5b6678'),
+    };
+    clone.querySelectorAll('text').forEach((node) => {
+      node.setAttribute('fill', currentTheme.text);
+      node.style.fill = currentTheme.text;
+    });
+    clone.querySelectorAll('.recharts-cartesian-grid line').forEach((node) => {
+      node.setAttribute('stroke', currentTheme.grid);
+    });
+    clone.querySelectorAll('.recharts-cartesian-axis line, .recharts-cartesian-axis-tick line').forEach((node) => {
+      node.setAttribute('stroke', currentTheme.axis);
+    });
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = currentTheme.surface;
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (error) {
+        reject(error);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load compare chart image'));
+    };
+    img.src = url;
+  });
+
+  useImperativeHandle(ref, () => ({
+    getChartAsDataUrl,
+  }), [chartTheme.surface, sources]);
+
   if (sources.length === 0) {
     return <div className="uns-compare-empty">Add a data source to start comparing.</div>;
   }
@@ -168,6 +238,7 @@ const UNSCompareLineChart = ({ sources, onSourceYKeyChange, timeColumn }) => {
     return (
       <div className="uns-compare-single-chart">
         <UNSLineChart
+          ref={singleChartRef}
           sqlData={sources[0].data}
           chartYKey={sources[0].chartYKey}
           onChartYKeyChange={(value) => onSourceYKeyChange(sources[0].id, value)}
@@ -307,7 +378,7 @@ const UNSCompareLineChart = ({ sources, onSourceYKeyChange, timeColumn }) => {
           </button>
         </div>
       )}
-      <div className="uns-compare-chart-body">
+      <div className="uns-compare-chart-body" ref={chartContainerRef}>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={displayedData} margin={{ top: 12, right: 18, left: 10, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
@@ -374,7 +445,9 @@ const UNSCompareLineChart = ({ sources, onSourceYKeyChange, timeColumn }) => {
       )}
     </div>
   );
-};
+});
+
+UNSCompareLineChart.displayName = 'UNSCompareLineChart';
 
 const UNSCompareGraphs = ({
   conn,
@@ -392,6 +465,9 @@ const UNSCompareGraphs = ({
 }) => {
   const liveIntervalRef = useRef(null);
   const cacheUploadInputRef = useRef(null);
+  const compareChartRef = useRef(null);
+  const [pdfExportStatus, setPdfExportStatus] = useState('');
+  const [pdfExporting, setPdfExporting] = useState(false);
   const activeGraph = graphs.find((graph) => graph.id === activeGraphId) || graphs[0] || null;
 
   const updateGraph = (graphId, updater) => {
@@ -434,10 +510,12 @@ const UNSCompareGraphs = ({
       const result = await queryTable(conn, {
         dbms: source.dbms,
         table: source.table,
+        time_mode: graph.timeMode || 'relative',
         time_value: graph.timeRangeValue,
         time_unit: graph.timeRangeUnit,
         start_time: graph.timeMode === 'absolute' ? formatDateTimeLocalForBackend(graph.startTime) : '',
         end_time: graph.timeMode === 'absolute' ? formatDateTimeLocalForBackend(graph.endTime) : '',
+        period_reference_time: graph.timeMode === 'period' ? formatDateTimeLocalForBackend(graph.periodReferenceTime) : '',
         where: source.where,
         column: source.column,
         time_column: graph.timeColumn,
@@ -521,6 +599,7 @@ const UNSCompareGraphs = ({
     activeGraph?.timeMode,
     activeGraph?.startTime,
     activeGraph?.endTime,
+    activeGraph?.periodReferenceTime,
     activeGraph?.timeColumn,
     activeGraph?.sources,
   ]);
@@ -537,6 +616,51 @@ const UNSCompareGraphs = ({
     updateGraph(graphId, (graph) => ({
       ...graph,
       sources: graph.sources.filter((source) => source.id !== sourceId),
+      removedSources: [
+        ...(graph.removedSources || []).filter((source) => source.id !== sourceId),
+        ...graph.sources
+          .filter((source) => source.id === sourceId)
+          .map((source) => ({
+            ...source,
+            loading: false,
+            removedAt: new Date().toISOString(),
+          })),
+      ],
+    }));
+  };
+
+  const reAddSource = (graphId, sourceId) => {
+    updateGraph(graphId, (graph) => {
+      const sourceToRestore = (graph.removedSources || []).find((source) => source.id === sourceId);
+      if (!sourceToRestore) return graph;
+      const alreadyActive = graph.sources.some((source) => (
+        source.id === sourceId
+        || (source.identityKey && source.identityKey === sourceToRestore.identityKey)
+      ));
+      if (alreadyActive) {
+        return {
+          ...graph,
+          removedSources: (graph.removedSources || []).filter((source) => source.id !== sourceId),
+        };
+      }
+      const { removedAt, ...restoredSource } = sourceToRestore;
+      return {
+        ...graph,
+        sources: [...graph.sources, {
+          ...restoredSource,
+          loading: false,
+          error: restoredSource.error || null,
+          needsFetch: !Array.isArray(restoredSource.data) || restoredSource.data.length === 0,
+        }],
+        removedSources: (graph.removedSources || []).filter((source) => source.id !== sourceId),
+      };
+    });
+  };
+
+  const clearRemovedSources = (graphId) => {
+    updateGraph(graphId, (graph) => ({
+      ...graph,
+      removedSources: [],
     }));
   };
 
@@ -557,6 +681,49 @@ const UNSCompareGraphs = ({
   const setSourceYKey = (sourceId, value) => {
     if (!activeGraph) return;
     updateSource(activeGraph.id, sourceId, (source) => ({ ...source, chartYKey: value }));
+  };
+
+  const sanitizeForFilename = (value) => (
+    String(value || 'uns-compare').replace(/[/\\:*?"<>|]/g, '-').trim() || 'uns-compare'
+  );
+
+  const handleExportPDF = async () => {
+    if (!activeGraph) return;
+    try {
+      setPdfExporting(true);
+      setPdfExportStatus('');
+      let chartUrl = null;
+      try {
+        if (compareChartRef.current?.getChartAsDataUrl) {
+          chartUrl = await compareChartRef.current.getChartAsDataUrl();
+        }
+      } catch (error) {
+        console.warn('Compare chart image not available for PDF:', error);
+      }
+
+      await exportUNSCompareToPDF({
+        graph: {
+          ...activeGraph,
+          sources: activeGraph.sources.map((source, index) => ({
+            ...source,
+            color: COMPARE_COLORS[index % COMPARE_COLORS.length],
+            chartYKey: getUNSEffectiveYKey({
+              data: source.data,
+              chartYKey: source.chartYKey,
+              preferredColumn: source.column,
+            }),
+          })),
+        },
+        chartImageDataUrl: chartUrl,
+        filename: sanitizeForFilename(activeGraph.name),
+      });
+      setPdfExportStatus('Compare PDF exported.');
+    } catch (error) {
+      console.error('Failed to export compare graph PDF:', error);
+      setPdfExportStatus(`PDF export failed: ${error.message || 'Unknown error'}`);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   const activeTimeRangeError = getTimeRangeError(activeGraph);
@@ -602,6 +769,15 @@ const UNSCompareGraphs = ({
         >
           Upload graphs
         </button>
+        <button
+          type="button"
+          className="uns-compare-secondary-btn"
+          onClick={handleExportPDF}
+          disabled={!activeGraph || activeGraph.sources.length === 0 || pdfExporting}
+          title="Export compare graph to PDF"
+        >
+          {pdfExporting ? 'Exporting...' : 'Export PDF'}
+        </button>
         <input
           ref={cacheUploadInputRef}
           type="file"
@@ -621,6 +797,13 @@ const UNSCompareGraphs = ({
         <div className="uns-compare-cache-message" role="status">
           <span>{cacheMessage}</span>
           <button type="button" onClick={onDismissCacheMessage} aria-label="Dismiss cache message">×</button>
+        </div>
+      )}
+
+      {pdfExportStatus && (
+        <div className="uns-compare-cache-message" role="status">
+          <span>{pdfExportStatus}</span>
+          <button type="button" onClick={() => setPdfExportStatus('')} aria-label="Dismiss PDF export status">&times;</button>
         </div>
       )}
 
@@ -652,6 +835,7 @@ const UNSCompareGraphs = ({
             timeMode={activeGraph.timeMode || 'relative'}
             startTime={activeGraph.startTime || ''}
             endTime={activeGraph.endTime || ''}
+            periodReferenceTime={activeGraph.periodReferenceTime || ''}
             timeColumn={activeGraph.timeColumn}
             loading={activeGraph.sources.some((source) => source.loading)}
             liveMode={activeGraph.liveMode}
@@ -661,6 +845,7 @@ const UNSCompareGraphs = ({
             onTimeModeChange={(value) => setTimeGraphControl('timeMode', value)}
             onStartTimeChange={(value) => setTimeGraphControl('startTime', value)}
             onEndTimeChange={(value) => setTimeGraphControl('endTime', value)}
+            onPeriodReferenceTimeChange={(value) => setTimeGraphControl('periodReferenceTime', value)}
             onTimeColumnChange={(value) => setTimeGraphControl('timeColumn', value)}
             onRefresh={() => refreshGraph(activeGraph)}
             onLiveModeChange={(value) => setGraphControl('liveMode', value)}
@@ -681,6 +866,7 @@ const UNSCompareGraphs = ({
           )}
 
           <UNSCompareLineChart
+            ref={compareChartRef}
             sources={activeGraph.sources}
             onSourceYKeyChange={setSourceYKey}
             timeColumn={activeGraph.timeColumn}
@@ -732,6 +918,42 @@ const UNSCompareGraphs = ({
               );
             })}
           </div>
+
+          {Array.isArray(activeGraph.removedSources) && activeGraph.removedSources.length > 0 && (
+            <div className="uns-compare-removed">
+              <div className="uns-compare-removed-header">
+                <div className="uns-compare-removed-title">Removed Items</div>
+                <button
+                  type="button"
+                  className="uns-compare-removed-clear"
+                  onClick={() => clearRemovedSources(activeGraph.id)}
+                  aria-label="Clear removed items"
+                  title="Clear removed items"
+                >
+                  &times;
+                </button>
+              </div>
+              <div className="uns-compare-removed-list">
+                {activeGraph.removedSources.map((source) => (
+                  <div key={source.id} className="uns-compare-removed-item">
+                    <div>
+                      <strong>{source.name}</strong>
+                      <div className="uns-compare-source-meta">
+                        {source.path || `${source.dbms}.${source.table}`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="uns-compare-secondary-btn"
+                      onClick={() => reAddSource(activeGraph.id, source.id)}
+                    >
+                      Re-add
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

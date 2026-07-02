@@ -135,6 +135,23 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
     clone.setAttribute('width', width);
     clone.setAttribute('height', height);
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const currentTheme = {
+      surface: getThemeColor('--color-surface', '#ffffff'),
+      text: getThemeColor('--color-text', '#212529'),
+      muted: getThemeColor('--color-text-muted', '#6c757d'),
+      grid: getThemeColor('--chart-grid', '#e9ecef'),
+      axis: getThemeColor('--chart-axis', '#6c757d'),
+    };
+    clone.querySelectorAll('text').forEach((node) => {
+      node.setAttribute('fill', currentTheme.text);
+      node.style.fill = currentTheme.text;
+    });
+    clone.querySelectorAll('.recharts-cartesian-grid line').forEach((node) => {
+      node.setAttribute('stroke', currentTheme.grid);
+    });
+    clone.querySelectorAll('.recharts-cartesian-axis line, .recharts-cartesian-axis-tick line').forEach((node) => {
+      node.setAttribute('stroke', currentTheme.axis);
+    });
     const svgData = new XMLSerializer().serializeToString(clone);
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -145,7 +162,7 @@ const UNSLineChart = forwardRef(({ sqlData, chartYKey, onChartYKeyChange, prefer
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = chartTheme.surface;
+        ctx.fillStyle = currentTheme.surface;
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/png'));

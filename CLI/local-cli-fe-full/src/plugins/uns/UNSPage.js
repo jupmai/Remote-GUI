@@ -1660,15 +1660,14 @@ const UNSPage = ({ node }) => {
     }
 
     const handleItemClick = (e) => {
-      // Left click: only expand/collapse if item has children or might have children
-      // Don't expand if clicking on the info button
       if (
-        (hasChildren || !hasNoChildren) &&
-        !e.target.closest('.uns-item-info-btn') &&
-        !e.target.closest('.uns-item-compare-btn')
+        e.target.closest('.uns-item-action-btn') ||
+        e.target.closest('.uns-item-compare-btn')
       ) {
-        expandItem(item, layerIndex);
+        return;
       }
+
+      toggleSidePanel(item);
     };
 
     const handleItemRightClick = (e) => {
@@ -1677,10 +1676,47 @@ const UNSPage = ({ node }) => {
       toggleSidePanel(item);
     };
 
-    const handleInfoButtonClick = (e) => {
-      // Info button click: toggle side panel with item details
-      e.stopPropagation(); // Prevent triggering the item click
+    const handleNavigationButtonClick = (e) => {
+      e.stopPropagation();
+      expandItem(item, layerIndex);
+    };
+
+    const handleDataButtonClick = (e) => {
+      e.stopPropagation();
       toggleSidePanel(item);
+    };
+
+    const getNavigationButtonConfig = () => {
+      if (hasChildren || !hasNoChildren) {
+        return {
+          className: 'drill',
+          icon: isExpanded ? '▼' : '▶',
+          label: isExpanded ? 'Collapse hierarchy' : 'Drill into hierarchy',
+          title: isExpanded ? 'Collapse this UNS branch' : 'Drill into this UNS branch',
+        };
+      }
+
+      if (hasNoChildren && hasData !== true) {
+        return {
+          className: 'leaf',
+          icon: '→',
+          label: 'Open leaf path',
+          title: 'Open this UNS leaf path',
+        };
+      }
+
+      return null;
+    };
+
+    const getDataButtonConfig = () => {
+      if (hasData !== true) return null;
+
+      return {
+        className: 'data',
+        icon: '▣',
+        label: 'Open data view',
+        title: 'Open data, query, and graph view for this UNS item',
+      };
     };
 
     const isSelected = selectedItem && getItemKey(selectedItem) === itemIdentity;
@@ -1690,6 +1726,8 @@ const UNSPage = ({ node }) => {
     // Don't add any class if hasData is false or null (no table or not checked)
     const dataIndicatorClass = hasData === true ? 'has-data' : '';
     const checkingClass = isCheckingData ? 'checking-data' : '';
+    const navigationButton = getNavigationButtonConfig();
+    const dataButton = getDataButtonConfig();
 
     return (
       <div
@@ -1700,8 +1738,9 @@ const UNSPage = ({ node }) => {
         onClick={handleItemClick}
         onContextMenu={handleItemRightClick}
         style={{
-          cursor: hasChildren || !hasNoChildren ? 'pointer' : 'default',
+          cursor: 'pointer',
         }}
+        title="Click to view UNS item details"
       >
         <div className="uns-item-icon">{icon}</div>
         <div className="uns-item-name">
@@ -1727,6 +1766,7 @@ const UNSPage = ({ node }) => {
         <div className="uns-item-actions">
           {hasTable && (
             <button
+              type="button"
               className={`uns-item-compare-btn ${isComparedInActiveGraph ? 'selected' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1739,16 +1779,27 @@ const UNSPage = ({ node }) => {
               {isComparedInActiveGraph ? 'Compared' : 'Compare'}
             </button>
           )}
-          <button
-            className="uns-item-info-btn"
-            onClick={handleInfoButtonClick}
-            title="View item details"
-            aria-label="View item details"
-          >
-            ℹ️
-          </button>
-          {(hasChildren || !hasNoChildren) && (
-            <div className="uns-item-expand">{isExpanded ? '▼' : '▶'}</div>
+          {navigationButton && (
+            <button
+              type="button"
+              className={`uns-item-action-btn ${navigationButton.className}`}
+              onClick={handleNavigationButtonClick}
+              title={navigationButton.title}
+              aria-label={navigationButton.label}
+            >
+              {navigationButton.icon}
+            </button>
+          )}
+          {dataButton && (
+            <button
+              type="button"
+              className={`uns-item-action-btn ${dataButton.className}`}
+              onClick={handleDataButtonClick}
+              title={dataButton.title}
+              aria-label={dataButton.label}
+            >
+              {dataButton.icon}
+            </button>
           )}
         </div>
       </div>

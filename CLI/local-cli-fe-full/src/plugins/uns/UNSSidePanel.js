@@ -228,6 +228,12 @@ const UNSSidePanel = ({
                   <div className="uns-side-panel-description-text">{String(itemData.description).trim()}</div>
                 </div>
               )}
+              {unsPath && (
+                <div className="uns-side-panel-info-row uns-side-panel-path" title={unsPath}>
+                  <strong>Path:</strong>
+                  <span>{unsPath}</span>
+                </div>
+              )}
               <div className="uns-side-panel-info-row">
                 <strong>Name:</strong> {getItemName(selectedItem)}
               </div>

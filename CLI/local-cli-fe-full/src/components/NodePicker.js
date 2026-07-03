@@ -1,5 +1,5 @@
 // src/components/NodePicker.js
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getConnectedNodes, checkNodeReachable } from '../services/api';
 import '../styles/NodePicker.css';
@@ -22,6 +22,23 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
   const [editError, setEditError] = useState(null);
   const [nodeAddressesRevealed, setNodeAddressesRevealed] = useState(false);
   const abortRef = useRef(null);
+  const displayedNodes = useMemo(() => [...new Set(
+    (Array.isArray(nodes) ? nodes : [])
+      .map((node) => (typeof node === 'string' ? node.trim() : ''))
+      .filter(Boolean)
+  )], [nodes]);
+  const normalizedSelectedNode = typeof selectedNode === 'string' ? selectedNode.trim() : '';
+  const hasValidSelectedNode = normalizedSelectedNode && displayedNodes.includes(normalizedSelectedNode);
+  const selectValue = hasValidSelectedNode ? normalizedSelectedNode : '';
+  const hasMaskedDropdownNodes = displayedNodes.some(hasMaskableAddress);
+
+  useEffect(() => {
+    if (!normalizedSelectedNode && displayedNodes.length > 0) {
+      onSelectNode(displayedNodes[0]);
+    } else if (selectedNode !== normalizedSelectedNode) {
+      onSelectNode(normalizedSelectedNode || null);
+    }
+  }, [displayedNodes, normalizedSelectedNode, onSelectNode, selectedNode]);
 
   useEffect(() => {
     if (!connectWarning) return;
@@ -79,8 +96,8 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
     setError(null);
 
     try {
-      console.log("Selected Node is this:", selectedNode);
-      const fetchedNodes = await getConnectedNodes({ selectedNode });
+      console.log("Selected Node is this:", normalizedSelectedNode);
+      const fetchedNodes = await getConnectedNodes({ selectedNode: normalizedSelectedNode });
       for (const node of fetchedNodes.data) {
         console.log(node);
         await onAddNode(node);
@@ -106,7 +123,7 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
     setLocal(isLocal);
     console.log("Local mode is now:", e.target.checked);
     // console.log("makeLocal is now:", makeLocal(selectedNode));
-    onSelectNode(makeLocal(selectedNode, isLocal));
+    onSelectNode(makeLocal(normalizedSelectedNode, isLocal));
   }
 
   const handleEditSave = async () => {
@@ -145,15 +162,15 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
     } else if (value === 'remove-node') {
       if (onRemoveNode) {
         try {
-          await onRemoveNode(selectedNode);
+          await onRemoveNode(normalizedSelectedNode);
         } catch (err) {
           console.error('Failed to remove node:', err);
           setError(err.message || 'Failed to remove node.');
         }
       }
     } else if (value === 'edit-node') {
-      setEditingNode(selectedNode);
-      setEditValue(selectedNode);
+      setEditingNode(normalizedSelectedNode);
+      setEditValue(normalizedSelectedNode);
       setEditError(null);
       setShowAddNode(false);
     } else {
@@ -163,13 +180,13 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
     }
   };
 
-  const displayedNodes = [...new Set(nodes.filter(Boolean))];
-  const hasMaskedDropdownNodes = displayedNodes.some(hasMaskableAddress);
-
   // If no node is selected, show connection input
-  if (!selectedNode) {
+  if (!hasValidSelectedNode) {
     return (
       <div className="node-picker-container">
+        {displayedNodes.length === 0 && (
+          <div className="node-picker-empty">No connections available</div>
+        )}
         <div className="connection-box">
           <input
             className={`node-picker-input${connectionError ? ' invalid' : ''}`}
@@ -209,9 +226,12 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
         <div className="node-picker-select-group">
           <select
             className="node-picker-select"
-            value={selectedNode}
+            value={selectValue}
             onChange={handleDropdownChange}
           >
+            {displayedNodes.length === 0 && (
+              <option value="" disabled>No connections available</option>
+            )}
             {displayedNodes.map((node) => (
               <option key={node} value={node}>
                 {nodeAddressesRevealed ? node : maskNodeAddress(node)}
@@ -223,7 +243,7 @@ const NodePicker = ({ nodes, selectedNode, networkDisconnected = false, onAddNod
           </select>
           {hasMaskedDropdownNodes && (
             <MaskedNodeAddress
-              value={selectedNode}
+              value={normalizedSelectedNode}
               revealed={nodeAddressesRevealed}
               onToggle={() => setNodeAddressesRevealed((isRevealed) => !isRevealed)}
               className="node-picker-reveal-control"

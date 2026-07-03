@@ -99,6 +99,12 @@
     text-transform: uppercase;
     white-space: nowrap;
   }
+
+  .node-picker-empty {
+    color: var(--color-text-muted, #5b6678);
+    font-size: 12px;
+    font-weight: 600;
+  }
   
   .node-picker-input {
     padding: 8px 12px;

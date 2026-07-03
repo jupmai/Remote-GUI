@@ -26,7 +26,7 @@ const getStoredCommand = () => {
   if (typeof window === 'undefined') return DEFAULT_COMMAND;
 
   const storedCommand = window.localStorage.getItem(COMMAND_STORAGE_KEY);
-  return storedCommand === null ? DEFAULT_COMMAND : storedCommand;
+  return storedCommand && storedCommand.trim() ? storedCommand : DEFAULT_COMMAND;
 };
 
 const getTextResponse = (value) => {

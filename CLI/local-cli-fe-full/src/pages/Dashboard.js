@@ -50,12 +50,16 @@ function getBrowserDefaultNode() {
   return `${host}:${DEFAULT_BOOKMARK_PORT}`;
 }
 
+function normalizeNodeValue(node) {
+  return typeof node === 'string' ? node.trim() : '';
+}
+
 function uniqueNodes(nodeList) {
   if (!Array.isArray(nodeList)) {
     return [];
   }
 
-  return [...new Set(nodeList.filter(Boolean))];
+  return [...new Set(nodeList.map(normalizeNodeValue).filter(Boolean))];
 }
 
 const Dashboard = () => {
@@ -95,7 +99,7 @@ const Dashboard = () => {
 
   const [selectedNode, setSelectedNode] = useState(() => {
     const savedSelectedNode = localStorage.getItem('dashboard-selected-node');
-    return savedSelectedNode || null;
+    return normalizeNodeValue(savedSelectedNode) || null;
   });
 
   const [restoredFromStorage, setRestoredFromStorage] = useState(false);
@@ -175,9 +179,14 @@ const Dashboard = () => {
 
   // Save selectedNode to localStorage whenever it changes
   useEffect(() => {
-    if (selectedNode) {
-      localStorage.setItem('dashboard-selected-node', selectedNode);
-      console.log('Saved selectedNode to localStorage:', selectedNode);
+    const normalizedSelectedNode = normalizeNodeValue(selectedNode);
+    if (normalizedSelectedNode) {
+      if (normalizedSelectedNode !== selectedNode) {
+        setSelectedNode(normalizedSelectedNode);
+        return;
+      }
+      localStorage.setItem('dashboard-selected-node', normalizedSelectedNode);
+      console.log('Saved selectedNode to localStorage:', normalizedSelectedNode);
     } else {
       localStorage.removeItem('dashboard-selected-node');
       console.log('Removed selectedNode from localStorage');
@@ -186,13 +195,22 @@ const Dashboard = () => {
 
   // Ensure selectedNode is in nodes list if it exists
   useEffect(() => {
-    if (selectedNode && !nodes.includes(selectedNode)) {
-      console.log('Selected node not in nodes list, adding it:', selectedNode);
+    const normalizedSelectedNode = normalizeNodeValue(selectedNode);
+    if (normalizedSelectedNode && !nodes.includes(normalizedSelectedNode)) {
+      console.log('Selected node not in nodes list, adding it:', normalizedSelectedNode);
       setNodes((prevNodes) => (
-        prevNodes.includes(selectedNode) ? prevNodes : [...prevNodes, selectedNode]
+        prevNodes.includes(normalizedSelectedNode) ? prevNodes : [...prevNodes, normalizedSelectedNode]
       ));
     }
   }, [selectedNode, nodes]);
+
+  useEffect(() => {
+    const validNodes = uniqueNodes(nodes);
+    const normalizedSelectedNode = normalizeNodeValue(selectedNode);
+    if (!normalizedSelectedNode && validNodes.length > 0) {
+      setSelectedNode(validNodes[0]);
+    }
+  }, [nodes, selectedNode]);
 
   // Show restoration message if data was loaded from localStorage
   useEffect(() => {
@@ -253,16 +271,18 @@ const Dashboard = () => {
         setNodes((prev) => uniqueNodes([...prev, ...bookmarkNodes]));
 
         setSelectedNode((currentSelectedNode) => {
-          const defaultBookmark = list.find((bookmark) => bookmark.is_default && bookmark.node);
-          if (preferDefault && defaultBookmark?.node) {
-            return defaultBookmark.node;
+          const defaultBookmark = list.find((bookmark) => bookmark.is_default && normalizeNodeValue(bookmark.node));
+          const defaultBookmarkNode = normalizeNodeValue(defaultBookmark?.node);
+          const currentNode = normalizeNodeValue(currentSelectedNode);
+          if (preferDefault && defaultBookmarkNode) {
+            return defaultBookmarkNode;
           }
 
-          if (currentSelectedNode) {
-            return currentSelectedNode;
+          if (currentNode) {
+            return currentNode;
           }
 
-          return defaultBookmark?.node || bookmarkNodes[0] || null;
+          return defaultBookmarkNode || bookmarkNodes[0] || null;
         });
       } catch (e) {
         // ignore failures silently
@@ -322,45 +342,49 @@ const Dashboard = () => {
 
   // Adds a new node (if valid and not already in the list)
   const handleAddNode = async (newNode) => {
-    if (!newNode) {
+    const normalizedNode = normalizeNodeValue(newNode);
+    if (!normalizedNode) {
       return;
     }
 
     setNodes((prevNodes) => (
-      prevNodes.includes(newNode) ? prevNodes : [...prevNodes, newNode]
+      prevNodes.includes(normalizedNode) ? prevNodes : [...prevNodes, normalizedNode]
     ));
-    await bookmarkNode({ node: newNode });
+    await bookmarkNode({ node: normalizedNode });
     window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
   const handleRemoveNode = async (nodeToRemove) => {
-    if (!nodeToRemove) {
+    const normalizedNode = normalizeNodeValue(nodeToRemove);
+    if (!normalizedNode) {
       return;
     }
 
-    setNodes((prev) => prev.filter((n) => n !== nodeToRemove));
-    if (selectedNode === nodeToRemove) {
-      const remaining = nodes.filter((n) => n !== nodeToRemove);
+    setNodes((prev) => prev.filter((n) => n !== normalizedNode));
+    if (normalizeNodeValue(selectedNode) === normalizedNode) {
+      const remaining = uniqueNodes(nodes.filter((n) => normalizeNodeValue(n) !== normalizedNode));
       setSelectedNode(remaining.length > 0 ? remaining[0] : null);
     }
-    await deleteBookmarkedNode({ node: nodeToRemove });
+    await deleteBookmarkedNode({ node: normalizedNode });
     window.dispatchEvent(new Event('bookmark-refresh'));
   };
 
   const handleEditNode = async (oldNode, newNode) => {
-    if (!oldNode || !newNode) {
+    const normalizedOldNode = normalizeNodeValue(oldNode);
+    const normalizedNewNode = normalizeNodeValue(newNode);
+    if (!normalizedOldNode || !normalizedNewNode) {
       return;
     }
 
-    setNodes((prev) => prev.map((n) => (n === oldNode ? newNode : n)));
-    if (selectedNode === oldNode) {
-      setSelectedNode(newNode);
+    setNodes((prev) => uniqueNodes(prev.map((n) => (n === normalizedOldNode ? normalizedNewNode : n))));
+    if (normalizeNodeValue(selectedNode) === normalizedOldNode) {
+      setSelectedNode(normalizedNewNode);
     }
     try {
-      await updateBookmarkNode({ oldNode, newNode });
+      await updateBookmarkNode({ oldNode: normalizedOldNode, newNode: normalizedNewNode });
     } catch (error) {
       if (error.message === 'Bookmark not found') {
-        await bookmarkNode({ node: newNode });
+        await bookmarkNode({ node: normalizedNewNode });
       } else {
         throw error;
       }

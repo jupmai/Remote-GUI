@@ -44,12 +44,27 @@ import '../styles/DataTable.css';
 
 const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 
+const renderCellValue = (value) => {
+  if (value === null || value === undefined) return '';
+
+  if (typeof value === 'object') {
+    return React.createElement(
+      'pre',
+      { className: 'data-table-json-value' },
+      JSON.stringify(value, null, 2)
+    );
+  }
+
+  return String(value);
+};
+
 function DataTable({
   data,
   minColumnWidth = 60,
   maxColumnWidth = 800,
   defaultColumnWidth = 150,
 }) {
+  const wrapperRef = useRef(null);
   const tableRef = useRef(null);
   const draggingRef = useRef({
     active: false,
@@ -72,27 +87,11 @@ function DataTable({
 
   // ✅ Hooks are unconditional
   const [colWidths, setColWidths] = useState(() => headers.map(() => defaultColumnWidth));
+  const [containerWidth, setContainerWidth] = useState(0);
 
   const getResizeSide = (index, totalCols) => {
-    if (totalCols < 2) return null;
-    return index < totalCols - 1 ? 'right' : 'left';
-  };
-
-  const pickSideForDrag = (index, dx, totalCols) => {
-    if (totalCols < 2 || dx === 0) return null;
-    const hasLeft = index > 0;
-    const hasRight = index < totalCols - 1;
-
-    // Drag right => grow using right-side neighbors when possible.
-    if (dx > 0) {
-      if (hasRight) return 'right';
-      if (hasLeft) return 'left';
-      return null;
-    }
-    // Drag left => grow using left-side neighbors when possible.
-    if (hasLeft) return 'left';
-    if (hasRight) return 'right';
-    return null;
+    if (totalCols < 1 || index < 0) return null;
+    return 'right';
   };
 
   const getNeighborIndices = (colIndex, totalCols, side) => {
@@ -111,8 +110,12 @@ function DataTable({
     const next = startWidths.slice();
     const neighborIndices = getNeighborIndices(colIndex, next.length, side);
 
-    // For last-column handles (side=left), moving left should expand the last column.
-    const effectiveDx = side === 'left' ? -dx : dx;
+    if (neighborIndices.length === 0) {
+      next[colIndex] = clamp(next[colIndex] + dx, minColumnWidth, maxColumnWidth);
+      return next;
+    }
+
+    const effectiveDx = dx;
 
     if (effectiveDx > 0) {
       // Grow target by borrowing space from neighbors until they hit minimum.
@@ -153,13 +156,36 @@ function DataTable({
   }, [headers, defaultColumnWidth]);
 
   useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return undefined;
+
+    const updateContainerWidth = () => {
+      const styles = window.getComputedStyle(wrapper);
+      const paddingLeft = parseFloat(styles.paddingLeft) || 0;
+      const paddingRight = parseFloat(styles.paddingRight) || 0;
+      const nextWidth = Math.max(0, wrapper.clientWidth - paddingLeft - paddingRight);
+      setContainerWidth(nextWidth);
+    };
+
+    updateContainerWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateContainerWidth);
+      return () => window.removeEventListener('resize', updateContainerWidth);
+    }
+
+    const observer = new ResizeObserver(updateContainerWidth);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     const handleMouseMove = (e) => {
       const { active, colIndex, side, startX } = draggingRef.current;
       if (!active) return;
       const dx = e.clientX - startX;
-      const sideForDrag = pickSideForDrag(colIndex, dx, headers.length) || side;
       setColWidths((prev) => {
-        return applyWidthDelta(prev, colIndex, dx, sideForDrag);
+        return applyWidthDelta(prev, colIndex, dx, side);
       });
       e.preventDefault();
     };
@@ -235,6 +261,18 @@ function DataTable({
     }
   };
 
+  const columnWidthTotal = colWidths.reduce((sum, width) => sum + width, 0);
+  const tableWidth = Math.max(columnWidthTotal, containerWidth);
+  const renderedColWidths = useMemo(() => {
+    if (!headers.length || !containerWidth || columnWidthTotal >= containerWidth) {
+      return colWidths;
+    }
+
+    const extraWidth = containerWidth - columnWidthTotal;
+    const extraPerColumn = extraWidth / headers.length;
+    return colWidths.map((width) => width + extraPerColumn);
+  }, [colWidths, columnWidthTotal, containerWidth, headers.length]);
+
   // ⛳ After all Hooks have run, you can early-return UI safely
   if (headers.length === 0) {
     return React.createElement('div', null, 'No data available.');
@@ -247,7 +285,7 @@ function DataTable({
     headers.map((_, i) =>
       React.createElement('col', {
         key: `col-${i}`,
-        style: { width: `${colWidths[i]}px` },
+        style: { width: `${renderedColWidths[i] ?? colWidths[i]}px` },
       })
     )
   );
@@ -262,12 +300,16 @@ function DataTable({
       headers.map((header, idx) =>
         React.createElement(
           'th',
-          { key: `header-${idx}`, 'data-col-index': idx },
+          {
+            key: `header-${idx}`,
+            'data-col-index': idx,
+            className: idx === headers.length - 1 ? 'data-table-last-column' : undefined,
+          },
           [
             React.createElement('div', { key: 'content', className: 'th-content' }, header),
             React.createElement('div', {
               key: 'resizer',
-              className: 'col-resizer',
+              className: `col-resizer ${idx === headers.length - 1 ? 'last-col-resizer' : ''}`,
               role: 'separator',
               'aria-orientation': 'vertical',
               'aria-label': `Resize column ${header}`,
@@ -294,7 +336,7 @@ function DataTable({
           React.createElement(
             'td',
             { key: `cell-${rowIndex}-${cellIndex}`, 'data-col-index': cellIndex },
-            String(row?.[header] ?? '')
+            renderCellValue(row?.[header])
           )
         )
       )
@@ -303,7 +345,7 @@ function DataTable({
 
   return React.createElement(
     'div',
-    { className: 'data-table-wrapper' },
+    { className: 'data-table-wrapper', ref: wrapperRef },
     [
       // Toggle button for internal columns (only show if internal columns exist)
       hasInternal && React.createElement(
@@ -332,7 +374,12 @@ function DataTable({
       // Table
       React.createElement(
         'table',
-        { key: 'table', ref: tableRef, className: 'data-table' },
+        {
+          key: 'table',
+          ref: tableRef,
+          className: 'data-table',
+          style: { width: `${tableWidth}px` },
+        },
         [colgroup, thead, tbody]
       )
     ]

@@ -1,0 +1,285 @@
+.grafana-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 24px);
+  min-height: 760px;
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.grafana-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex: 0 0 auto;
+}
+
+.grafana-header h2 {
+  margin: 0;
+  color: var(--color-heading);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.grafana-header p {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.grafana-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(260px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px 18px;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
+  flex: 0 0 auto;
+}
+
+.grafana-field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.grafana-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--component-input-border);
+  border-radius: 4px;
+  background: var(--component-input-bg);
+  color: var(--component-input-text);
+}
+
+.grafana-field input:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.grafana-form-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.grafana-primary-button,
+.grafana-secondary-button {
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.grafana-primary-button {
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.grafana-primary-button:hover {
+  background: var(--color-primary-hover);
+}
+
+.grafana-secondary-button {
+  border: 1px solid var(--component-button-secondary-border);
+  background: var(--component-button-secondary-bg);
+  color: var(--component-button-secondary-text);
+}
+
+.grafana-secondary-button:hover:not(:disabled) {
+  background: var(--component-button-secondary-hover-bg);
+}
+
+.grafana-secondary-button:disabled {
+  cursor: not-allowed;
+}
+
+.grafana-tabs {
+  display: flex;
+  gap: 8px;
+  max-width: 100%;
+  padding: 10px 18px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex: 0 0 auto;
+}
+
+.grafana-tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 360px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--component-button-secondary-bg);
+}
+
+.grafana-tab.active {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.grafana-tab button {
+  min-height: 34px;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.grafana-tab button:first-child {
+  min-width: 120px;
+  max-width: 220px;
+  padding: 7px 12px;
+  border-left: none;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grafana-tab button:hover {
+  background: var(--component-hover-bg);
+}
+
+.grafana-tab-edit,
+.grafana-tab-remove {
+  padding: 7px 10px;
+  color: var(--color-text-muted);
+}
+
+.grafana-tab-remove {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.grafana-error,
+.grafana-warning {
+  position: relative;
+  margin: 12px 20px 0;
+  padding: 12px 42px 12px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.grafana-error {
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-error-text);
+}
+
+.grafana-warning {
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
+}
+
+.grafana-warning code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--component-code-bg);
+  color: var(--component-code-text);
+}
+
+.grafana-error button,
+.grafana-warning button {
+  position: absolute;
+  top: 7px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.grafana-empty-state {
+  margin: 20px;
+  padding: 28px;
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.grafana-frame-shell {
+  flex: 1;
+  min-height: 70vh;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.grafana-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 70vh;
+  border: 0;
+  background: var(--color-surface);
+}
+
+@media (max-width: 900px) {
+  .grafana-form {
+    grid-template-columns: 1fr;
+  }
+
+  .grafana-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .grafana-form-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .grafana-page {
+    height: calc(100vh - 12px);
+    min-height: 680px;
+  }
+
+  .grafana-tabs {
+    padding: 10px 12px;
+  }
+
+  .grafana-tab button:first-child {
+    min-width: 96px;
+    max-width: 150px;
+  }
+
+  .grafana-frame-shell {
+    min-height: 70vh;
+  }
+
+  .grafana-frame {
+    min-height: 70vh;
+  }
+}

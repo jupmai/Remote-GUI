@@ -271,7 +271,7 @@ def get_env_config_endpoint():
         ("REMOTE_CONN", "Default AnyLog node connection alias", None),
         ("REMOTE_GUI_FE", "Frontend port", "31800"),
         ("REMOTE_GUI_BE", "Backend port", "8080"),
-        ("GRAFANA_URL", "Grafana dashboard URL", "http://23.239.12.151:3100/dashboards/f/ddu0qc65783r4a/smart-city"),
+        ("GRAFANA_URL", "Grafana dashboard URL", None),
         ("ANYLOG_MCP_SSE_URL", "AnyLog MCP SSE endpoint", "http://50.116.13.109:32349/mcp/sse"),
         ("OLLAMA_MODEL", "Ollama LLM model", "qwen2.5:7b-instruct"),
         ("LLM_ENDPOINT", "LLM API endpoint", None),
@@ -383,7 +383,8 @@ def get_status():
 
 def should_force_raw_text(command_text: str) -> bool:
     """Force raw text for commands that are known to be non-tabular."""
-    return "get msg client" in command_text.lower()
+    normalized = " ".join((command_text or "").split()).lower()
+    return normalized == "help" or normalized.startswith("help ") or "get msg client" in normalized
 
 
 

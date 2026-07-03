@@ -1,22 +1,23 @@
 
 .data-table {
     width: 100%;
-    max-width: 100%;
+    max-width: none;
     border-collapse: collapse;
     table-layout: fixed;
   }
   
-  .data-table th,
-  .data-table td {
-    border: 1px solid #ccc;
+.data-table th,
+.data-table td {
+    border: 1px solid var(--color-border);
     text-align: left;
     padding: 8px;
     word-break: break-word;   /* ← allow long content to wrap within its cell */
     /* overflow-wrap: anywhere; */
   }
   
-  .data-table th {
-    background-color: #f2f2f2;
+.data-table th {
+    background-color: var(--color-surface-muted);
+    color: var(--color-heading);
   }
   
 
@@ -25,18 +26,21 @@
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
+    padding-right: 12px;
+    box-sizing: border-box;
   }
   
   .data-table {
     width: 100%;
     min-width: 100%;
+    max-width: none;
     border-collapse: collapse;
     table-layout: fixed;
   }
   
-  .data-table th,
-  .data-table td {
-    border: 1px solid #ccc;
+.data-table th,
+.data-table td {
+    border: 1px solid var(--color-border);
     text-align: left;
     padding: 8px;
     word-break: break-word;
@@ -44,10 +48,29 @@
     text-overflow: ellipsis;
   }
   
-  .data-table th {
-    background-color: #f2f2f2;
+.data-table th {
+    background-color: var(--color-surface-muted);
+    color: var(--color-heading);
     position: relative;
     white-space: nowrap;
+    overflow: visible;
+  }
+
+  .data-table-json-value {
+    display: block;
+    max-width: 100%;
+    margin: 0;
+    padding: 8px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background-color: var(--component-code-bg);
+    color: var(--component-code-text);
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   
   .th-content {
@@ -57,12 +80,35 @@
   .col-resizer {
     position: absolute;
     top: 0;
-    right: -3px;
-    width: 6px;
+    right: 0;
+    width: 10px;
     height: 100%;
     cursor: col-resize;
     user-select: none;
     touch-action: none;
+    z-index: 3;
+  }
+
+  .col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 20%;
+    right: 3px;
+    width: 2px;
+    height: 60%;
+    border-radius: 999px;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }
+
+  .col-resizer:hover::after,
+  .col-resizer:focus::after,
+  body.col-resizing .col-resizer::after {
+    background: var(--color-primary);
+  }
+
+  .last-col-resizer {
+    right: 0;
   }
   
   body.col-resizing,

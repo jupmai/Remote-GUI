@@ -12,12 +12,73 @@ import '../styles/Client.css'; // Optional: create client-specific CSS
 
 const DEFAULT_COMMAND = 'get status';
 const COMMAND_STORAGE_KEY = 'client-command-draft';
+const HELP_SECTION_LABELS = new Set([
+  'Usage',
+  'Explanation',
+  'Examples',
+  'Index',
+  'Link',
+  'Documentation',
+]);
+const URL_PATTERN = /(https?:\/\/[^\s"'<>]+)/g;
 
 const getStoredCommand = () => {
   if (typeof window === 'undefined') return DEFAULT_COMMAND;
 
   const storedCommand = window.localStorage.getItem(COMMAND_STORAGE_KEY);
   return storedCommand === null ? DEFAULT_COMMAND : storedCommand;
+};
+
+const getTextResponse = (value) => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return '';
+  return JSON.stringify(value, null, 2);
+};
+
+const isAnyLogHelpOutput = (value, executedCommand) => {
+  const text = getTextResponse(value);
+  const commandLooksLikeHelp = /^\s*help(?:\s+\S+)?\s*$/i.test(executedCommand || '');
+  const hasHelpSections = /(^|\n)\s*(Usage|Explanation|Examples|Index|Link|Documentation):/m.test(text);
+  const hasDocumentationUrl = /https:\/\/github\.com\/AnyLog-co\/documentation/i.test(text);
+
+  return commandLooksLikeHelp || (hasHelpSections && hasDocumentationUrl);
+};
+
+const renderLinkedText = (text, keyPrefix) => {
+  const parts = text.split(URL_PATTERN);
+
+  return parts.map((part, index) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={`${keyPrefix}-link-${index}`}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {part}
+        </a>
+      );
+    }
+
+    return <React.Fragment key={`${keyPrefix}-text-${index}`}>{part}</React.Fragment>;
+  });
+};
+
+const tryParseAdditionalContent = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    try {
+      return JSON.parse(value.replace(/'/g, '"'));
+    } catch (nestedError) {
+      return null;
+    }
+  }
 };
 
 const Client = ({ node }) => {
@@ -506,6 +567,71 @@ const Client = ({ node }) => {
     );
   };
 
+  const renderHelpOutput = (value) => {
+    const text = getTextResponse(value);
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+
+    return (
+      <div className="anylog-help-output" aria-label="AnyLog help output">
+        {lines.map((line, index) => {
+          const labelMatch = line.match(/^(\s*)(Usage|Explanation|Examples|Index|Link|Documentation):(\s*)/);
+
+          if (labelMatch && HELP_SECTION_LABELS.has(labelMatch[2])) {
+            const [, indent, label, spacing] = labelMatch;
+            const rest = line.slice(labelMatch[0].length);
+
+            return (
+              <div key={`help-line-${index}`} className="anylog-help-line anylog-help-section-line">
+                {indent}
+                <span className="anylog-help-section-label">{label}:</span>
+                {spacing}
+                {renderLinkedText(rest, `help-${index}`)}
+              </div>
+            );
+          }
+
+          return (
+            <div key={`help-line-${index}`} className="anylog-help-line">
+              {renderLinkedText(line || ' ', `help-${index}`)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderTextOutput = (value, className = 'client-text-output') => {
+    if (isAnyLogHelpOutput(value, lastExecutedCommand?.command)) {
+      return renderHelpOutput(value);
+    }
+
+    return <pre className={className}>{getTextResponse(value)}</pre>;
+  };
+
+  const renderAdditionalContent = (value) => {
+    const parsed = tryParseAdditionalContent(value);
+    const statistics = parsed?.Statistics || parsed?.statistics;
+
+    if (Array.isArray(statistics) && statistics.length > 0) {
+      return (
+        <div className="additional-content-stats">
+          {statistics.map((stat, index) => (
+            <dl key={`stat-${index}`} className="additional-stat-card">
+              {Object.entries(stat).map(([key, statValue]) => (
+                <React.Fragment key={`${index}-${key}`}>
+                  <dt>{key}</dt>
+                  <dd>{typeof statValue === 'object' ? JSON.stringify(statValue) : String(statValue)}</dd>
+                </React.Fragment>
+              ))}
+            </dl>
+          ))}
+        </div>
+      );
+    }
+
+    return <pre className="additional-content-text">{getTextResponse(value)}</pre>;
+  };
+
   const handleCreateNewGroup = async () => {
     if (!newGroupName.trim()) {
       setBookmarkError('Please enter a group name');
@@ -782,7 +908,7 @@ const Client = ({ node }) => {
               {additionalContent && (
                 <div className="additional-content">
                   <h4>Additional Information</h4>
-                  <pre className="additional-content-text">{additionalContent}</pre>
+                  {renderAdditionalContent(additionalContent)}
                 </div>
               )}
             </>
@@ -807,11 +933,11 @@ const Client = ({ node }) => {
 
           {resultType === 'raw' && (
             <div className="raw-text-subbox">
-              <pre>{responseData}</pre>
+              {renderTextOutput(responseData)}
             </div>
           )}
           {resultType !== 'table' && resultType !== 'blobs' && resultType !== 'streaming' && resultType !== 'raw' && (
-            <pre>{responseData}</pre>
+            renderTextOutput(responseData)
           )}
         </div>
       )}

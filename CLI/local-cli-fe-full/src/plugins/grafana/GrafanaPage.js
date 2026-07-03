@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { getGrafanaUrl } from './grafana_api';
+import React, { useEffect, useMemo, useState } from 'react';
+import './GrafanaPage.css';
+
+const STORAGE_KEY = 'grafana-dashboard-tabs';
 
 // Plugin metadata - used by the plugin loader
 export const pluginMetadata = {
@@ -7,277 +9,268 @@ export const pluginMetadata = {
   icon: null
 };
 
-const GrafanaPage = ({ node }) => {
-  const [grafanaUrl, setGrafanaUrl] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [iframeError, setIframeError] = useState(false);
+const createTab = ({ name, url }) => ({
+  id: `grafana-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  name: name.trim(),
+  url: url.trim(),
+});
 
-  useEffect(() => {
-    const loadGrafanaUrl = async () => {
-      try {
-        setLoading(true);
-        const url = await getGrafanaUrl();
-        setGrafanaUrl(url);
-        setError(null);
-        setIframeError(false);
-      } catch (err) {
-        console.error('Failed to load Grafana URL:', err);
-        setError('Failed to load Grafana URL. Please check backend configuration.');
-        // Fallback to default if API fails
-        setGrafanaUrl('https://grafana.com/');
-      } finally {
-        setLoading(false);
-      }
+const getStoredState = () => {
+  if (typeof window === 'undefined') {
+    return { tabs: [], activeTabId: null };
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
+    if (!parsed || !Array.isArray(parsed.tabs)) {
+      return { tabs: [], activeTabId: null };
+    }
+
+    return {
+      tabs: parsed.tabs
+        .filter((tab) => tab?.id && tab?.name && tab?.url)
+        .map((tab) => ({
+          id: String(tab.id),
+          name: String(tab.name),
+          url: String(tab.url),
+        })),
+      activeTabId: parsed.activeTabId ? String(parsed.activeTabId) : null,
     };
+  } catch (error) {
+    console.error('Failed to load Grafana tabs:', error);
+    return { tabs: [], activeTabId: null };
+  }
+};
 
-    loadGrafanaUrl();
-  }, []);
+const validateUrl = (url) => {
+  const trimmed = url.trim();
+  if (!trimmed) return 'Enter a Grafana dashboard URL.';
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return 'Grafana URLs must start with http:// or https://.';
+  }
 
-  // Detect iframe loading issues after a timeout
+  try {
+    const parsed = new URL(trimmed);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return 'Grafana URLs must start with http:// or https://.';
+    }
+  } catch (error) {
+    return 'Enter a valid HTTP or HTTPS URL.';
+  }
+
+  return '';
+};
+
+const deriveNameFromUrl = (url, fallbackNumber) => {
+  try {
+    const parsed = new URL(url);
+    const pathName = parsed.pathname.split('/').filter(Boolean).pop();
+    return pathName ? decodeURIComponent(pathName).slice(0, 48) : parsed.hostname;
+  } catch (error) {
+    return `Dashboard ${fallbackNumber}`;
+  }
+};
+
+const GrafanaPage = () => {
+  const storedState = useMemo(getStoredState, []);
+  const [tabs, setTabs] = useState(storedState.tabs);
+  const [activeTabId, setActiveTabId] = useState(storedState.activeTabId);
+  const [dashboardName, setDashboardName] = useState('');
+  const [dashboardUrl, setDashboardUrl] = useState('');
+  const [editingTabId, setEditingTabId] = useState(null);
+  const [error, setError] = useState('');
+  const [embedWarning, setEmbedWarning] = useState(false);
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0] || null;
+
   useEffect(() => {
-    if (!grafanaUrl || loading) return;
+    if (tabs.length === 0 || tabs.some((tab) => tab.id === activeTabId)) return;
+    setActiveTabId(tabs[0].id);
+  }, [tabs, activeTabId]);
 
-    const timeout = setTimeout(() => {
-      // Check if iframe might be blocked
-      // This is a fallback - the onError handler should catch it first
-      const iframe = document.querySelector('iframe[title="Grafana Dashboard"]');
-      if (iframe) {
-        try {
-          // Try to access iframe - if blocked, this will throw
-          const iframeWindow = iframe.contentWindow;
-          if (!iframeWindow) {
-            setIframeError(true);
-          }
-        } catch (e) {
-          // Cross-origin or blocked - this is expected for external URLs
-          // Don't set error here as cross-origin is normal
-        }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tabs,
+        activeTabId: activeTab?.id || null,
+      })
+    );
+  }, [tabs, activeTab]);
+
+  useEffect(() => {
+    setEmbedWarning(false);
+  }, [activeTab?.id, activeTab?.url]);
+
+  const resetForm = () => {
+    setDashboardName('');
+    setDashboardUrl('');
+    setEditingTabId(null);
+    setError('');
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    const trimmedUrl = dashboardUrl.trim();
+    const validationMessage = validateUrl(trimmedUrl);
+    if (validationMessage) {
+      setError(validationMessage);
+      return;
+    }
+
+    const trimmedName = dashboardName.trim() || deriveNameFromUrl(trimmedUrl, tabs.length + 1);
+
+    if (editingTabId) {
+      setTabs((currentTabs) =>
+        currentTabs.map((tab) =>
+          tab.id === editingTabId ? { ...tab, name: trimmedName, url: trimmedUrl } : tab
+        )
+      );
+      setActiveTabId(editingTabId);
+    } else {
+      const newTab = createTab({ name: trimmedName, url: trimmedUrl });
+      setTabs((currentTabs) => [...currentTabs, newTab]);
+      setActiveTabId(newTab.id);
+    }
+
+    resetForm();
+  };
+
+  const handleEdit = (tab) => {
+    setDashboardName(tab.name);
+    setDashboardUrl(tab.url);
+    setEditingTabId(tab.id);
+    setError('');
+  };
+
+  const handleRemove = (tabId) => {
+    setTabs((currentTabs) => {
+      const nextTabs = currentTabs.filter((tab) => tab.id !== tabId);
+      if (tabId === activeTabId) {
+        setActiveTabId(nextTabs[0]?.id || null);
       }
-    }, 3000); // Wait 3 seconds to see if iframe loads
+      return nextTabs;
+    });
 
-    return () => clearTimeout(timeout);
-  }, [grafanaUrl, loading]);
-
-  const handleOpenGrafana = () => {
-    if (grafanaUrl) {
-      window.open(grafanaUrl, '_blank');
+    if (editingTabId === tabId) {
+      resetForm();
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        padding: '20px',
-        backgroundColor: 'var(--color-bg)',
-        color: 'var(--color-text)'
-      }}>
-        <p>Loading Grafana configuration...</p>
-      </div>
-    );
-  }
+  const handleOpenActiveTab = () => {
+    if (activeTab?.url) {
+      window.open(activeTab.url, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
-    <div style={{ 
-      width: '100%',
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '0',
-      overflow: 'hidden',
-      backgroundColor: 'var(--color-bg)',
-      color: 'var(--color-text)'
-    }}>
-      {/* Header with title and button */}
-      <div style={{ 
-        position: 'relative',
-        padding: '20px',
-        backgroundColor: 'var(--color-surface)',
-        borderBottom: '2px solid var(--color-primary)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexShrink: 0,
-        zIndex: 100,
-        boxShadow: 'var(--shadow-card)'
-      }}>
-        <h2 style={{ 
-          margin: 0,
-          color: 'var(--color-heading)',
-          fontSize: '24px',
-          fontWeight: '600',
-          borderBottom: '2px solid var(--color-primary)',
-          paddingBottom: '10px',
-          display: 'inline-block'
-        }}>
-          Grafana
-        </h2>
-        
-        <button 
-          onClick={handleOpenGrafana}
-          style={{ 
-            padding: '12px 24px', 
-            fontSize: '14px',
-            background: 'linear-gradient(135deg, #007bff, #0056b3)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-            transition: 'all 0.3s ease',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px'
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.background = 'linear-gradient(135deg, #0056b3, #004085)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.3)';
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-          }}
-        >
+    <div className="grafana-page">
+      <header className="grafana-header">
+        <div>
+          <h2>Grafana</h2>
+          {activeTab && <p>{activeTab.name}</p>}
+        </div>
+        <button type="button" className="grafana-secondary-button" onClick={handleOpenActiveTab} disabled={!activeTab}>
           Open in New Tab
         </button>
-      </div>
+      </header>
+
+      <form className="grafana-form" onSubmit={handleSubmit}>
+        <div className="grafana-field grafana-name-field">
+          <label htmlFor="grafana-dashboard-name">Tab name</label>
+          <input
+            id="grafana-dashboard-name"
+            type="text"
+            value={dashboardName}
+            onChange={(event) => setDashboardName(event.target.value)}
+            placeholder="Operations dashboard"
+          />
+        </div>
+        <div className="grafana-field grafana-url-field">
+          <label htmlFor="grafana-dashboard-url">Dashboard URL</label>
+          <input
+            id="grafana-dashboard-url"
+            type="url"
+            value={dashboardUrl}
+            onChange={(event) => setDashboardUrl(event.target.value)}
+            placeholder="https://grafana.example.com/d/..."
+          />
+        </div>
+        <div className="grafana-form-actions">
+          <button type="submit" className="grafana-primary-button">
+            {editingTabId ? 'Update' : 'Add'}
+          </button>
+          {editingTabId && (
+            <button type="button" className="grafana-secondary-button" onClick={resetForm}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </form>
 
       {error && (
-        <div style={{ 
-          padding: '15px 20px', 
-          backgroundColor: 'var(--color-danger-soft)', 
-          border: '1px solid var(--color-danger-border)',
-          borderRadius: '6px',
-          margin: '20px',
-          color: 'var(--color-danger)',
-          flexShrink: 0,
-          fontWeight: '500'
-        }}>
-          <span className="error-dismiss" onClick={() => setError(null)}>×</span>
-          <strong>Error:</strong> {error}
+        <div className="grafana-error" role="alert">
+          <button type="button" onClick={() => setError('')} aria-label="Dismiss error">×</button>
+          {error}
         </div>
       )}
 
-      {iframeError && (
-        <div style={{ 
-          padding: '20px', 
-          backgroundColor: 'var(--color-warning-soft)', 
-          border: '1px solid var(--color-warning-border)',
-          borderRadius: '6px',
-          margin: '20px',
-          color: 'var(--color-warning-text)',
-          flexShrink: 0
-        }}>
-          <span className="error-dismiss" onClick={() => setIframeError(false)}>×</span>
-          <strong>⚠️ Iframe Embedding Blocked:</strong>
-          <p style={{ margin: '10px 0 0 0', fontSize: '14px' }}>
-            Grafana is preventing this page from being embedded in an iframe for security reasons. 
-            This is a common security setting. Please use the <strong>"Open in New Tab"</strong> button above to access Grafana.
-          </p>
-          <p style={{ margin: '10px 0 0 0', fontSize: '12px', fontStyle: 'italic' }}>
-            To enable iframe embedding, configure Grafana's <code>allow_embedding</code> setting in your Grafana configuration file.
-          </p>
+      {tabs.length === 0 && (
+        <div className="grafana-empty-state">
+          Add a Grafana HTTP or HTTPS dashboard URL to embed it here.
         </div>
       )}
 
-      {/* Centered Embedded Grafana iframe */}
-      {grafanaUrl && (
-        <div style={{ 
-          flex: 1,
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '20px',
-          boxSizing: 'border-box',
-          overflow: 'hidden'
-        }}>
-          <div style={{ 
-            width: '100%',
-            height: '100%',
-            maxWidth: '1400px',
-            backgroundColor: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-card)',
-            position: 'relative'
-          }}>
-            {iframeError ? (
-              <div style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: '40px',
-                backgroundColor: 'var(--color-surface-muted)',
-                color: 'var(--color-text)',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '48px', marginBottom: '20px' }}>🔒</div>
-                <h3 style={{ color: 'var(--color-heading)', marginBottom: '10px' }}>Unable to Load Grafana</h3>
-                <p style={{ color: 'var(--color-text-muted)', marginBottom: '20px' }}>
-                  The Grafana server is blocking iframe embedding. Click the button above to open in a new tab.
-                </p>
-                <button 
-                  onClick={handleOpenGrafana}
-                  style={{ 
-                    padding: '12px 24px', 
-                    fontSize: '14px',
-                    background: 'linear-gradient(135deg, #007bff, #0056b3)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                    transition: 'all 0.3s ease',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #0056b3, #004085)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 123, 255, 0.3)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
-                  }}
+      {tabs.length > 0 && (
+        <>
+          <div className="grafana-tabs" role="tablist" aria-label="Grafana dashboards">
+            {tabs.map((tab) => (
+              <div key={tab.id} className={`grafana-tab ${tab.id === activeTab?.id ? 'active' : ''}`}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab.id === activeTab?.id}
+                  onClick={() => setActiveTabId(tab.id)}
+                  title={tab.url}
                 >
-                  Open Grafana in New Tab
+                  {tab.name}
+                </button>
+                <button type="button" className="grafana-tab-edit" onClick={() => handleEdit(tab)} aria-label={`Edit ${tab.name}`}>
+                  Edit
+                </button>
+                <button type="button" className="grafana-tab-remove" onClick={() => handleRemove(tab.id)} aria-label={`Remove ${tab.name}`}>
+                  ×
                 </button>
               </div>
-            ) : (
-              <iframe
-                src={grafanaUrl}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none'
-                }}
-                title="Grafana Dashboard"
-                allow="fullscreen"
-                onError={() => {
-                  setIframeError(true);
-                }}
-                onLoad={(e) => {
-                  // Iframe loaded - clear any error state
-                  setIframeError(false);
-                }}
-              />
-            )}
+            ))}
           </div>
-        </div>
+
+          {embedWarning && (
+            <div className="grafana-warning" role="status">
+              <button type="button" onClick={() => setEmbedWarning(false)} aria-label="Dismiss embed warning">×</button>
+              If this dashboard stays blank, Grafana may be blocking iframe embedding. Enable <code>allow_embedding</code> in Grafana or use Open in New Tab.
+            </div>
+          )}
+
+          {activeTab && (
+            <section className="grafana-frame-shell" aria-label={`${activeTab.name} dashboard`}>
+              <iframe
+                key={activeTab.id}
+                src={activeTab.url}
+                title={`Grafana Dashboard - ${activeTab.name}`}
+                className="grafana-frame"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                referrerPolicy="no-referrer"
+                allow="fullscreen"
+                onLoad={() => setEmbedWarning(false)}
+                onError={() => setEmbedWarning(true)}
+              />
+            </section>
+          )}
+        </>
       )}
     </div>
   );

@@ -149,8 +149,58 @@
   }
 
   .response-box pre {
+    margin: 0;
+    background-color: var(--component-code-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--component-code-text);
+    padding: 12px;
     white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+
+  .client-text-output {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    overflow-x: auto;
+  }
+
+  .anylog-help-output {
+    max-width: 100%;
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background-color: var(--component-code-bg);
+    color: var(--component-code-text);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .anylog-help-line {
+    min-height: 1.55em;
+  }
+
+  .anylog-help-section-line {
+    margin-top: 8px;
+  }
+
+  .anylog-help-section-label {
+    display: inline-block;
+    color: var(--color-heading);
+    font-weight: 700;
+  }
+
+  .anylog-help-output a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
   }
 
   .raw-text-subbox {
@@ -209,14 +259,17 @@
   /* Additional content styling */
   .additional-content {
     margin-top: 20px;
-    padding: 15px;
+    padding: 16px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border-radius: 6px;
+    color: var(--color-text);
   }
 
   .additional-content h4 {
-    margin: 0 0 10px 0;
+    margin: 0 0 14px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--color-border);
     color: var(--color-heading);
     font-size: 16px;
     font-weight: 600;
@@ -230,10 +283,50 @@
     margin: 0;
     font-family: 'Courier New', monospace;
     font-size: 13px;
+    line-height: 1.5;
     color: var(--component-code-text);
     white-space: pre-wrap;
-    word-wrap: break-word;
+    overflow-wrap: anywhere;
     overflow-x: auto;
+  }
+
+  .additional-content-stats {
+    display: grid;
+    gap: 10px;
+  }
+
+  .additional-stat-card {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background-color: var(--color-surface-muted);
+  }
+
+  .additional-stat-card dt,
+  .additional-stat-card dd {
+    min-width: 0;
+    margin: 0;
+    padding: 10px 12px;
+  }
+
+  .additional-stat-card dt {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .additional-stat-card dd {
+    color: var(--color-heading);
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    overflow-wrap: anywhere;
   }
 
   .table-export-buttons {
@@ -254,6 +347,38 @@
 
   .table-export-btn:hover {
     background-color: #0056b3;
+  }
+
+  :root[data-theme='dark'] .additional-content {
+    background-color: var(--color-surface-elevated);
+    border-color: var(--color-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  :root[data-theme='dark'] .additional-content h4 {
+    color: var(--color-heading);
+    border-bottom-color: var(--color-border);
+  }
+
+  :root[data-theme='dark'] .additional-content-text {
+    background-color: var(--component-code-bg);
+    border-color: var(--color-border);
+    color: var(--component-code-text);
+  }
+
+  :root[data-theme='dark'] .additional-stat-card {
+    background-color: var(--color-surface-muted);
+    border-color: var(--color-border);
+  }
+
+  :root[data-theme='dark'] .additional-stat-card dt {
+    background-color: rgba(102, 179, 255, 0.08);
+    border-bottom-color: var(--color-border);
+    color: var(--color-text-muted);
+  }
+
+  :root[data-theme='dark'] .additional-stat-card dd {
+    color: var(--color-heading);
   }
    
    

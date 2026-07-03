@@ -9,8 +9,8 @@ import os
 # Create the API router
 api_router = APIRouter(prefix="/grafana", tags=["Grafana"])
 
-# Default Grafana URL (can be overridden via environment variable)
-DEFAULT_GRAFANA_URL = os.getenv("GRAFANA_URL", "http://23.239.12.151:3100/dashboards/f/ddu0qc65783r4a/smart-city")
+# Optional Grafana URL. Fresh deployments do not provide a default dashboard.
+GRAFANA_URL = os.getenv("GRAFANA_URL", "")
 
 # Request/Response models
 class GrafanaConfig(BaseModel):
@@ -23,7 +23,7 @@ async def grafana_info():
     return {
         "name": "Grafana Plugin",
         "version": "1.0.0",
-        "url": DEFAULT_GRAFANA_URL,
+        "url": GRAFANA_URL,
         "description": "Access to Grafana dashboards"
     }
 
@@ -31,5 +31,5 @@ async def grafana_info():
 async def get_grafana_url():
     """Get the Grafana URL"""
     return {
-        "url": DEFAULT_GRAFANA_URL
+        "url": GRAFANA_URL
     }

@@ -21,3 +21,4 @@ If you have contributed to this project, add your name and email below.
 | Pranav Purathepparambil |    pranav.purathe@gmail.com |
 |   Massimiliano Pinto    |   massimiliano@anylog.co    |
 |      Pouria Rezaei      | rezaeizadehpouria@gmail.com |
+|          Jay            |   maijustin397@gmail.com    |

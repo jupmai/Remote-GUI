@@ -8,6 +8,10 @@
       "enabled": true,
       "description": "Network monitoring"
     },
+    "monitoring": {
+      "enabled": true,
+      "description": "Monitoring Plugin"
+    },
     "policies": {
       "enabled": false,
       "description": "Policy management"
